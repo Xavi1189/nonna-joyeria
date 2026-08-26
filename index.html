@@ -323,6 +323,7 @@ let state = {
   viewingLoteId: null,
   cuentaPhoneInput: '',
   cuentaNameInput: '',
+  cuentaPasswordInput: '',
   cuentaError: '',
   settingsWhatsappInput: '',
   deepLinkPaymentId: null,
@@ -1072,9 +1073,13 @@ function viewCuenta(){
         <label>Teléfono a 10 dígitos</label>
         <input type="tel" id="cuentaPhone" maxlength="10" placeholder="6621234567" value="${esc(state.cuentaPhoneInput)}">
       </div>
+      <div class="field" style="text-align:left;">
+        <label>Contraseña</label>
+        <input type="password" id="cuentaPassword" placeholder="Mínimo 6 caracteres" value="${esc(state.cuentaPasswordInput)}">
+      </div>
       ${state.cuentaError ? `<p style="color:var(--danger);font-size:14px;margin-top:-8px;">${esc(state.cuentaError)}</p>` : ''}
       <button class="btn btn-gold" id="cuentaEnter" style="width:100%;">Ver mi cuenta</button>
-      <p class="muted" style="margin-top:14px;">¿Aún no tienes cuenta? Se crea con tu nombre y teléfono la primera vez que entres.</p>
+      <p class="muted" style="margin-top:14px;">¿Primera vez? Elige aquí mismo tu contraseña — la vas a necesitar junto con tu nombre y teléfono la próxima vez.</p>
     </div>`;
   }
 
@@ -2151,6 +2156,8 @@ function bindEvents(){
   if(cuentaPhone) cuentaPhone.oninput = (e)=>{ state.cuentaPhoneInput = e.target.value; };
   const cuentaName = document.getElementById('cuentaName');
   if(cuentaName) cuentaName.oninput = (e)=>{ state.cuentaNameInput = e.target.value; };
+  const cuentaPassword = document.getElementById('cuentaPassword');
+  if(cuentaPassword) cuentaPassword.oninput = (e)=>{ state.cuentaPasswordInput = e.target.value; };
   const cuentaSalir = document.getElementById('cuentaSalir');
   if(cuentaSalir) cuentaSalir.onclick = () => { state.clientPhone=''; state.clientName=''; render(); };
   document.querySelectorAll('[data-ticket]').forEach(b => b.onclick = () => openTicket(b.dataset.ticket));
@@ -2482,25 +2489,31 @@ function changeQty(productId, delta){
 async function enterCuenta(){
   const name = (state.cuentaNameInput||'').trim();
   const phone = (state.cuentaPhoneInput||'').replace(/\D/g,'');
+  const password = state.cuentaPasswordInput || '';
   if(!name){ state.cuentaError = 'Ingresa tu nombre.'; render(); return; }
   if(phone.length !== 10){ state.cuentaError = 'Ingresa un teléfono válido a 10 dígitos.'; render(); return; }
+  if(password.length < 6){ state.cuentaError = 'La contraseña debe tener al menos 6 caracteres.'; render(); return; }
 
-  const existing = state.customers.find(c=>c.phone===phone);
-  if(existing){
-    if(existing.name.trim().toLowerCase() !== name.toLowerCase()){
-      state.cuentaError = 'El nombre no coincide con el registrado para este teléfono.';
-      render();
-      return;
-    }
-    state.clientName = existing.name;
-  } else {
-    // primer acceso: se registra con el nombre y teléfono capturados aquí
-    state.customers.push({phone, name});
-    await saveCustomers();
-    state.clientName = name;
+  const cuentaEnterBtn = document.getElementById('cuentaEnter');
+  if(cuentaEnterBtn){ cuentaEnterBtn.disabled = true; cuentaEnterBtn.textContent = 'Entrando…'; }
+
+  const { data, error } = await sb.rpc('customer_authenticate', {p_phone: phone, p_name: name, p_password: password});
+
+  if(error || data === 'error'){
+    state.cuentaError = 'Nombre, teléfono o contraseña incorrectos.';
+    render();
+    return;
   }
+
+  // Sincroniza el registro local con lo que ya quedó guardado en la base de datos.
+  let existing = state.customers.find(c=>c.phone===phone);
+  if(!existing){ state.customers.push({phone, name}); }
+  else { existing.name = name; }
+
   state.clientPhone = phone;
+  state.clientName = name;
   state.cuentaError = '';
+  state.cuentaPasswordInput = '';
   render();
 }
 
