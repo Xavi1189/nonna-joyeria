@@ -933,6 +933,14 @@ function buildPaymentPendingMessage(pr){
 
 /* ================= RENDER ROOT ================= */
 function render(){
+  // Antes de volver a dibujar, recuerda qué campo tenía el foco (y dónde estaba el cursor),
+  // porque cada render reemplaza el HTML y por default el navegador pierde el foco —
+  // eso era lo que hacía que los buscadores solo dejaran escribir una letra a la vez.
+  const active = document.activeElement;
+  const activeId = active && active.id;
+  const activeStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+  const activeEnd = active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null;
+
   renderSidebar();
   const root = document.getElementById('view-root');
   if(!state.loaded){ root.innerHTML = '<p class="muted" style="text-align:center;padding:60px 0;">Cargando catálogo…</p>'; return; }
@@ -943,6 +951,16 @@ function render(){
   renderDrawer();
   renderModal();
   bindEvents();
+
+  if(activeId){
+    const el = document.getElementById(activeId);
+    if(el && typeof el.focus === 'function'){
+      el.focus();
+      if(activeStart != null && typeof el.setSelectionRange === 'function'){
+        try{ el.setSelectionRange(activeStart, activeEnd); }catch(e){}
+      }
+    }
+  }
 }
 
 function totalExistencia(){ return state.products.reduce((s,p)=>s+productStock(p),0); }
