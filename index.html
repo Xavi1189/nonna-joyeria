@@ -320,6 +320,10 @@ let state = {
   reportRangeStart: '',
   reportRangeEnd: '',
   reportSelectedLoteId: null,  // si tiene valor, el reporte muestra SOLO esa recepción (no un rango combinado)
+  ventasSearch: '',
+  ventasPage: 1,
+  cuentasSearch: '',
+  cuentasPage: 1,
   viewingLoteId: null,
   cuentaPhoneInput: '',
   cuentaNameInput: '',
@@ -1600,8 +1604,19 @@ function adminVentas(){
     const s = state.sales.find(x=>x.id===state.viewingSaleId);
     if(s) return saleDetail(s);
   }
-  const sorted = [...state.sales].sort((a,b)=> new Date(b.date)-new Date(a.date));
-  const rows = sorted.map(s => `
+  const search = (state.ventasSearch||'').trim().toLowerCase();
+  let filtered = [...state.sales].sort((a,b)=> new Date(b.date)-new Date(a.date));
+  if(search){
+    filtered = filtered.filter(s =>
+      s.id.toLowerCase().includes(search) ||
+      (s.customerName||'').toLowerCase().includes(search) ||
+      (s.customerPhone||'').includes(search)
+    );
+  }
+
+  const pageInfo = paginate(filtered, state.ventasPage);
+  state.ventasPage = pageInfo.page;
+  const rows = pageInfo.items.map(s => `
     <tr class="clickable" data-view-sale="${esc(s.id)}">
       <td>${esc(s.id)}</td>
       <td>${esc(s.customerName)}<div class="muted">${esc(s.customerPhone)}</div></td>
@@ -1611,14 +1626,21 @@ function adminVentas(){
     </tr>`).join('');
 
   return `
-    <h3 class="display" style="margin:0 0 16px;">Ventas (${state.sales.length})</h3>
-    ${state.sales.length ? `
+    <div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <h3 class="display" style="margin:0;">Ventas (${state.sales.length})</h3>
+      <div class="search"><input type="text" id="ventasSearchInput" placeholder="Buscar por folio, clienta o teléfono…" value="${esc(state.ventasSearch)}"></div>
+    </div>
+    ${state.sales.length===0 ? `<div class="empty"><div class="display">Aún no hay ventas</div><p>Las compras hechas por clientas desde el catálogo aparecerán aquí.</p></div>`
+      : filtered.length===0 ? `<div class="empty"><div class="display">Sin resultados</div><p>Prueba con otro folio, nombre o teléfono.</p></div>`
+      : `
     <div class="table-wrap">
       <table>
         <thead><tr><th>Compra</th><th>Clienta</th><th>Fecha</th><th>Total compra</th><th>Saldo de su cuenta</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>` : `<div class="empty"><div class="display">Aún no hay ventas</div><p>Las compras hechas por clientas desde el catálogo aparecerán aquí.</p></div>`}
+    </div>
+    ${paginationHtml('ventas', pageInfo.page, pageInfo.totalPages)}
+    `}
     <p class="muted" style="margin-top:16px;">Los abonos ya no se registran por venta: se administran por clienta en la pestaña <b>Cuentas</b>, sobre el total de su deuda.</p>
   `;
 }
@@ -1663,8 +1685,16 @@ function adminCuentas(){
     const c = state.customers.find(x=>x.phone===state.viewingCustomerPhone);
     if(c) return customerAccountDetail(c);
   }
-  const withActivity = state.customers.filter(c => customerSales(c.phone).length > 0);
-  const rows = withActivity.map(c => {
+  const allWithActivity = state.customers.filter(c => customerSales(c.phone).length > 0);
+  const search = (state.cuentasSearch||'').trim().toLowerCase();
+  let filtered = allWithActivity;
+  if(search){
+    filtered = filtered.filter(c => c.name.toLowerCase().includes(search) || c.phone.includes(search));
+  }
+
+  const pageInfo = paginate(filtered, state.cuentasPage);
+  state.cuentasPage = pageInfo.page;
+  const rows = pageInfo.items.map(c => {
     const total = customerTotal(c.phone), abonado = customerAbonado(c.phone), saldo = customerSaldo(c.phone);
     return `
     <tr>
@@ -1678,12 +1708,19 @@ function adminCuentas(){
   }).join('');
 
   return `
-    <h3 class="display" style="margin:0 0 16px;">Cuentas de clientas (${withActivity.length})</h3>
-    ${withActivity.length ? `
+    <div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <h3 class="display" style="margin:0;">Cuentas de clientas (${allWithActivity.length})</h3>
+      <div class="search"><input type="text" id="cuentasSearchInput" placeholder="Buscar por nombre o teléfono…" value="${esc(state.cuentasSearch)}"></div>
+    </div>
+    ${allWithActivity.length===0 ? `<div class="empty"><div class="display">Aún no hay cuentas</div><p>Aparecerán aquí cuando una clienta realice su primera compra.</p></div>`
+      : filtered.length===0 ? `<div class="empty"><div class="display">Sin resultados</div><p>Prueba con otro nombre o teléfono.</p></div>`
+      : `
     <div class="table-wrap"><table>
       <thead><tr><th>Clienta</th><th>Total comprado</th><th>Total abonado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>` : `<div class="empty"><div class="display">Aún no hay cuentas</div><p>Aparecerán aquí cuando una clienta realice su primera compra.</p></div>`}
+    </table></div>
+    ${paginationHtml('cuentas', pageInfo.page, pageInfo.totalPages)}
+    `}
   `;
 }
 
@@ -1827,6 +1864,22 @@ function adminSolicitudes(){
       ${otherReqs.map(reqRow).join('')}
     </div>` : ''}
   `;
+}
+
+const PAGE_SIZE = 20;
+function paginate(items, currentPage){
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, currentPage||1), totalPages);
+  return { items: items.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE), page, totalPages };
+}
+function paginationHtml(kind, page, totalPages){
+  if(totalPages <= 1) return '';
+  return `
+    <div class="row-between" style="margin-top:18px;">
+      <button type="button" class="btn btn-ghost btn-sm" data-page-prev="${kind}" ${page<=1?'disabled':''}>&larr; Anterior</button>
+      <span class="muted">Página ${page} de ${totalPages}</span>
+      <button type="button" class="btn btn-ghost btn-sm" data-page-next="${kind}" ${page>=totalPages?'disabled':''}>Siguiente &rarr;</button>
+    </div>`;
 }
 
 function isQuickRange(period, start, end){
@@ -2144,6 +2197,8 @@ function bindEvents(){
     state.viewingProductTraceId = null;
     state.creatingLote = false;
     state.editingProduct = null;
+    state.ventasPage = 1;
+    state.cuentasPage = 1;
     render();
   });
 
@@ -2352,6 +2407,8 @@ function bindEvents(){
   document.querySelectorAll('[data-view-sale]').forEach(tr => tr.onclick = () => { state.viewingSaleId = tr.dataset.viewSale; render(); });
   const backBtn = document.getElementById('backToVentas');
   if(backBtn) backBtn.onclick = () => { state.viewingSaleId = null; render(); };
+  const ventasSearchInput = document.getElementById('ventasSearchInput');
+  if(ventasSearchInput) ventasSearchInput.oninput = (e) => { state.ventasSearch = e.target.value; state.ventasPage = 1; render(); };
   document.querySelectorAll('[data-goto-customer]').forEach(b => b.onclick = () => {
     state.adminTab = 'cuentas';
     state.viewingCustomerPhone = b.dataset.gotoCustomer;
@@ -2362,8 +2419,22 @@ function bindEvents(){
   // Cuentas
   document.querySelectorAll('[data-view-customer]').forEach(tr => tr.onclick = () => { state.viewingCustomerPhone = tr.dataset.viewCustomer; render(); });
   document.querySelectorAll('[data-delete-customer]').forEach(b => b.onclick = (e) => { e.stopPropagation(); confirmDeleteCustomer(b.dataset.deleteCustomer); });
+  const cuentasSearchInput = document.getElementById('cuentasSearchInput');
+  if(cuentasSearchInput) cuentasSearchInput.oninput = (e) => { state.cuentasSearch = e.target.value; state.cuentasPage = 1; render(); };
   const backToCuentas = document.getElementById('backToCuentas');
   if(backToCuentas) backToCuentas.onclick = () => { state.viewingCustomerPhone = null; render(); };
+  document.querySelectorAll('[data-page-prev]').forEach(b => b.onclick = () => {
+    const kind = b.dataset.pagePrev;
+    if(kind==='ventas') state.ventasPage = Math.max(1, (state.ventasPage||1)-1);
+    if(kind==='cuentas') state.cuentasPage = Math.max(1, (state.cuentasPage||1)-1);
+    render();
+  });
+  document.querySelectorAll('[data-page-next]').forEach(b => b.onclick = () => {
+    const kind = b.dataset.pageNext;
+    if(kind==='ventas') state.ventasPage = (state.ventasPage||1)+1;
+    if(kind==='cuentas') state.cuentasPage = (state.cuentasPage||1)+1;
+    render();
+  });
   const registrarAbono = document.getElementById('registrarAbono');
   if(registrarAbono) registrarAbono.onclick = registrarAbonoHandler;
   document.querySelectorAll('[data-confirm-abono-req]').forEach(b => b.onclick = () => confirmAbonoRequest(b.dataset.confirmAbonoReq));
