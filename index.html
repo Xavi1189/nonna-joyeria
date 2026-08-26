@@ -574,6 +574,26 @@ function resizeImageFile(file, maxDim, quality){
   });
 }
 
+// Sube una imagen (en base64) a Supabase Storage y regresa su URL pública.
+// Si lo que recibe ya es una URL (no una imagen nueva), la deja igual —
+// evita volver a subir una foto que no cambió.
+async function uploadDataUrlToStorage(dataUrl, bucket, folder){
+  if(!dataUrl || !dataUrl.startsWith('data:')) return dataUrl || '';
+  try{
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const ext = (blob.type.split('/')[1] || 'jpg').split('+')[0];
+    const path = folder + '/' + genId('IMG') + '.' + ext;
+    const { error } = await sb.storage.from(bucket).upload(path, blob, {contentType: blob.type, upsert: true});
+    if(error) throw error;
+    const { data } = sb.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  }catch(err){
+    console.error('Error subiendo imagen a Storage', err);
+    return dataUrl; // respaldo: no perder la imagen si falla la subida
+  }
+}
+
 /* ================= STORAGE ================= */
 // Compatibilidad: normaliza solicitudes guardadas con el formato anterior (un solo artículo,
 // sin lista "items" ni "total"), para que el resto de la app siempre pueda asumir el formato
@@ -2590,21 +2610,43 @@ async function completeRequestPurchase(){
     render(); return;
   }
 
-  // validar existencia de todos los artículos del pedido
+  const crConfirmBtn = document.getElementById('crConfirm');
+  if(crConfirmBtn){ crConfirmBtn.disabled = true; crConfirmBtn.textContent = 'Guardando…'; }
+
+  // validación rápida en el cliente (para dar feedback inmediato)
   for(const it of req.items){
     const p = state.products.find(x=>x.id===it.productId);
     if(!p || productStock(p) < it.qty){
       state.modal.error = 'Ya no hay existencia suficiente de ' + it.name + '.';
+      if(crConfirmBtn){ crConfirmBtn.disabled = false; crConfirmBtn.textContent = 'Confirmar compra'; }
       render(); return;
     }
   }
 
-  const saleItems = req.items.map(it => {
-    const p = state.products.find(x=>x.id===it.productId);
-    const breakdown = consumeStock(p, it.qty);
-    return {productId:p.id, name:p.name, qty:it.qty, price:p.price, loteBreakdown:breakdown};
+  // Descuento real y a prueba de condiciones de carrera: esta función bloquea
+  // cada artículo mientras lo procesa, así dos compras simultáneas por la
+  // última pieza nunca pueden vender lo mismo dos veces.
+  const { data: breakdownResult, error: stockError } = await sb.rpc('consume_stock_multi', {
+    items: req.items.map(it => ({productId: it.productId, qty: it.qty})),
   });
-  await saveProducts();
+  if(stockError){
+    state.modal.error = 'Ya no hay existencia suficiente de uno de los artículos — alguien más lo compró justo antes.';
+    if(crConfirmBtn){ crConfirmBtn.disabled = false; crConfirmBtn.textContent = 'Confirmar compra'; }
+    render(); return;
+  }
+
+  const saleItems = req.items.map(it => {
+    const bd = (breakdownResult||[]).find(b=>b.productId===it.productId);
+    return {productId:it.productId, name:it.name, qty:it.qty, price:it.price, loteBreakdown: bd ? bd.loteBreakdown : []};
+  });
+
+  // Refresca localmente los artículos afectados para reflejar la existencia real.
+  const { data: freshProducts } = await sb.from('products').select('*').in('id', req.items.map(it=>it.productId));
+  (freshProducts||[]).forEach(row => {
+    const updated = dbToProduct(row);
+    const idx = state.products.findIndex(p=>p.id===updated.id);
+    if(idx >= 0) state.products[idx] = updated;
+  });
 
   let cust = state.customers.find(c=>c.phone===req.customerPhone);
   if(!cust){ cust = {phone:req.customerPhone, name:req.customerName}; state.customers.push(cust); await saveCustomers(); }
@@ -2624,6 +2666,9 @@ async function completeRequestPurchase(){
   await saveRequests();
 
   // El pago queda pendiente de tu confirmación; el ticket se envía automáticamente cuando lo confirmes.
+  const receiptUrl = method==='transferencia'
+    ? await uploadDataUrlToStorage(state.modal.receiptImage || '', 'payment-receipts', 'comprobantes')
+    : '';
   const pr = {
     id: genId('PC'),
     type: 'compra',
@@ -2632,7 +2677,7 @@ async function completeRequestPurchase(){
     customerName: req.customerName,
     amount: anticipo,
     method,
-    receiptImage: method==='transferencia' ? state.modal.receiptImage : '',
+    receiptImage: receiptUrl,
     date: new Date().toISOString(),
     status: 'pendiente',
   };
@@ -2664,6 +2709,11 @@ async function submitSelfAbono(){
     state.modal.error = 'Adjunta tu comprobante de transferencia para continuar.';
     render(); return;
   }
+  const saSendBtn = document.getElementById('sa_send');
+  if(saSendBtn){ saSendBtn.disabled = true; saSendBtn.textContent = 'Enviando…'; }
+  const receiptUrl = method==='transferencia'
+    ? await uploadDataUrlToStorage(state.modal.receiptImage || '', 'payment-receipts', 'comprobantes')
+    : '';
   const reqAbono = {
     id: genId('ABS'),
     type: 'abono',
@@ -2671,7 +2721,7 @@ async function submitSelfAbono(){
     customerName: state.clientName,
     amount,
     method,
-    receiptImage: method==='transferencia' ? state.modal.receiptImage : '',
+    receiptImage: receiptUrl,
     date: new Date().toISOString(),
     status: 'pendiente',
   };
@@ -2762,16 +2812,23 @@ async function saveLoteForm(){
   const notes = (meta.notes||'').trim();
   if(!provider){ notify('Indica el proveedor de esta recepción.'); return; }
 
+  const validRows = state.loteFormRows.filter(row => row.category && Number(row.price||0) > 0 && Number(row.qty||0) > 0);
+  if(validRows.length === 0){ notify('Agrega al menos un artículo con categoría, precio y cantidad válidos.'); return; }
+
+  const lfSaveBtn = document.getElementById('lf_save');
+  if(lfSaveBtn){ lfSaveBtn.disabled = true; lfSaveBtn.textContent = 'Guardando…'; }
+
   const items = [];
-  state.loteFormRows.forEach(row => {
-    const category = row.category;
-    const price = Number(row.price || 0);
-    const qty = Number(row.qty || 0);
-    const name = (row.name||'').trim();
-    const image = row.image || '';
-    if(category && price > 0 && qty > 0) items.push({category, price, qty, name, image});
-  });
-  if(items.length === 0){ notify('Agrega al menos un artículo con categoría, precio y cantidad válidos.'); return; }
+  for(const row of validRows){
+    const image = await uploadDataUrlToStorage(row.image || '', 'product-images', 'productos');
+    items.push({
+      category: row.category,
+      price: Number(row.price || 0),
+      qty: Number(row.qty || 0),
+      name: (row.name||'').trim(),
+      image,
+    });
+  }
 
   let lote;
   const isContinuation = !!state.loteFormTargetId;
@@ -2828,13 +2885,12 @@ async function saveLoteForm(){
   render();
 }
 
-function saveProductForm(){
+async function saveProductForm(){
   const name = document.getElementById('pf_name').value.trim();
   const sku = document.getElementById('pf_sku').value.trim();
   const category = readCategoryField('pf_category');
   const price = Number(document.getElementById('pf_price').value || 0);
   const desc = document.getElementById('pf_desc').value.trim();
-  const image = state.tempImageData || '';
   const onSale = !!(state.productFormDraft && state.productFormDraft.onSale);
   let salePrice = null;
   if(onSale){
@@ -2844,6 +2900,10 @@ function saveProductForm(){
     if(salePrice >= price){ notify('El precio de oferta debe ser menor al precio normal.'); return; }
   }
   if(!name || !category || price < 0){ notify('Completa nombre, categoría y precio válidos.'); return; }
+
+  const pfSaveBtn = document.getElementById('pf_save');
+  if(pfSaveBtn){ pfSaveBtn.disabled = true; pfSaveBtn.textContent = 'Guardando…'; }
+  const image = await uploadDataUrlToStorage(state.tempImageData || '', 'product-images', 'productos');
 
   const p = state.products.find(pp=>pp.id===state.editingProduct.id);
   if(p) Object.assign(p, {name, sku, category, price, desc, image, onSale, salePrice});
