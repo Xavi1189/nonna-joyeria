@@ -226,7 +226,25 @@
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = 'https://odplvcdbkvjsbgtlmwva.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_DihMwfcQFtb17KnrKt-DIg_kH3CIPah';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
+// Sesión de "Mi Cuenta" (clientas): Supabase Auth solo cubre tu sesión de administrador;
+// la de las clientas la guardamos nosotros mismos para que no tengan que volver a
+// escribir su nombre, teléfono y contraseña cada vez que abren la app.
+const CLIENT_SESSION_KEY = 'nonna_client_session';
+function saveClientSession(phone, name){
+  try{ localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({phone, name})); }catch(e){}
+}
+function loadClientSession(){
+  try{
+    const raw = localStorage.getItem(CLIENT_SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function clearClientSession(){
+  try{ localStorage.removeItem(CLIENT_SESSION_KEY); }catch(e){}
+}
 // URL fija donde vive la app publicada — se usa para armar los links de WhatsApp
 // (completar compra, pago por confirmar) para que siempre apunten al mismo lugar.
 const APP_URL = 'https://nonna-joyeria.vercel.app';
@@ -2304,7 +2322,7 @@ function bindEvents(){
   const cuentaPassword = document.getElementById('cuentaPassword');
   if(cuentaPassword) cuentaPassword.oninput = (e)=>{ state.cuentaPasswordInput = e.target.value; };
   const cuentaSalir = document.getElementById('cuentaSalir');
-  if(cuentaSalir) cuentaSalir.onclick = () => { state.clientPhone=''; state.clientName=''; render(); };
+  if(cuentaSalir) cuentaSalir.onclick = () => { state.clientPhone=''; state.clientName=''; clearClientSession(); render(); };
   const btnChangePassword = document.getElementById('btnChangePassword');
   if(btnChangePassword) btnChangePassword.onclick = () => { state.modal = {type:'changePassword', error:''}; render(); };
   document.querySelectorAll('[data-ticket]').forEach(b => b.onclick = () => openTicket(b.dataset.ticket));
@@ -2728,6 +2746,7 @@ async function enterCuenta(){
   state.clientName = name;
   state.cuentaError = '';
   state.cuentaPasswordInput = '';
+  saveClientSession(phone, name);
   render();
 }
 
@@ -3230,6 +3249,12 @@ function handleDeepLink(){
   const { data: { session } } = await sb.auth.getSession();
   if(session) state.adminAuthed = true;
   await loadAll();
+  // Restaura la sesión de Mi Cuenta si la clienta ya había entrado antes en este dispositivo.
+  const savedClient = loadClientSession();
+  if(savedClient && savedClient.phone){
+    state.clientPhone = savedClient.phone;
+    state.clientName = savedClient.name || '';
+  }
   handleDeepLink();
   render();
 })();
