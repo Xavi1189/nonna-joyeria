@@ -1117,7 +1117,10 @@ function viewCuenta(){
         <h2 class="display" style="margin:4px 0;">${esc(state.clientName || 'Hola')}</h2>
         <p class="muted">Tel. ${esc(state.clientPhone)}</p>
       </div>
-      <button class="link-btn" id="cuentaSalir">Cerrar sesión</button>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+        <button class="link-btn" id="cuentaSalir">Cerrar sesión</button>
+        <button class="link-btn" id="btnChangePassword">Cambiar contraseña</button>
+      </div>
     </div>`;
 
   const reqLabels = {pendiente:['pendiente','Esperando respuesta'], aceptada:['liquidada','¡Aceptada! Completa tu compra'], rechazada:['pendiente','No disponible'], completada:['liquidada','Compra completada']};
@@ -1710,7 +1713,10 @@ function adminCuentas(){
   return `
     <div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:10px;">
       <h3 class="display" style="margin:0;">Cuentas de clientas (${allWithActivity.length})</h3>
-      <div class="search"><input type="text" id="cuentasSearchInput" placeholder="Buscar por nombre o teléfono…" value="${esc(state.cuentasSearch)}"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="search"><input type="text" id="cuentasSearchInput" placeholder="Buscar por nombre o teléfono…" value="${esc(state.cuentasSearch)}"></div>
+        <button class="btn btn-gold btn-sm" id="btnAdminNewCustomer">Dar de alta clienta</button>
+      </div>
     </div>
     ${allWithActivity.length===0 ? `<div class="empty"><div class="display">Aún no hay cuentas</div><p>Aparecerán aquí cuando una clienta realice su primera compra.</p></div>`
       : filtered.length===0 ? `<div class="empty"><div class="display">Sin resultados</div><p>Prueba con otro nombre o teléfono.</p></div>`
@@ -1785,6 +1791,10 @@ function customerAccountDetail(c){
 
       <h4 style="margin-top:22px;">Estado de cuenta</h4>
       <button class="btn btn-ghost" data-statement="${esc(c.phone)}">Ver / enviar estado de cuenta</button>
+
+      <h4 style="margin-top:22px;">Acceso a Mi Cuenta</h4>
+      <p class="muted">Genera o restablece la contraseña de esta clienta para que pueda entrar a su cuenta. Ella podrá cambiarla después desde ahí.</p>
+      <button class="btn btn-ghost" data-admin-password="${esc(c.phone)}" data-admin-password-name="${esc(c.name)}">Generar / restablecer contraseña</button>
 
       <h4 style="margin-top:26px;">Zona de riesgo</h4>
       <p class="muted">Elimina esta clienta y todo su historial de compras y abonos — se usa para borrar cuentas de prueba. La existencia de los artículos vendidos se devuelve al inventario.</p>
@@ -2090,11 +2100,53 @@ function renderModal(){
           <p class="muted" style="margin-top:10px;">Se abrirá WhatsApp para avisarnos del abono; te enviaremos tu comprobante actualizado en cuanto lo confirmemos.</p>
         </div>
       </div>`;
+  } else if(state.modal.type === 'adminSetPassword'){
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+          <button class="modal-close" id="modalClose">&times;</button>
+          <div class="eyebrow">Cuenta de clienta</div>
+          <h3 class="display" style="margin:6px 0 18px;">${state.modal.isNew ? 'Dar de alta clienta' : 'Generar / restablecer contraseña'}</h3>
+          <div class="field"><label>Nombre completo</label><input id="asp_name" value="${esc(state.modal.name||'')}" placeholder="Nombre completo"></div>
+          <div class="field"><label>Teléfono a 10 dígitos</label><input id="asp_phone" type="tel" maxlength="10" value="${esc(state.modal.phone||'')}" placeholder="6621234567"></div>
+          <div class="field">
+            <label>Contraseña</label>
+            <div style="display:flex;gap:10px;">
+              <input id="asp_password" value="" placeholder="Mínimo 6 caracteres" style="flex:1;">
+              <button type="button" class="btn btn-ghost btn-sm" id="asp_generate">Generar</button>
+            </div>
+          </div>
+          <p class="muted">Comparte esta contraseña con la clienta — no queda visible en ningún otro lugar después de guardarla. Ella podrá cambiarla desde Mi Cuenta.</p>
+          ${state.modal.error ? `<p style="color:var(--danger);font-size:14px;">${esc(state.modal.error)}</p>` : ''}
+          <button class="btn btn-gold" id="asp_save" style="width:100%;margin-top:8px;">Guardar</button>
+        </div>
+      </div>`;
+  } else if(state.modal.type === 'changePassword'){
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+          <button class="modal-close" id="modalClose">&times;</button>
+          <div class="eyebrow">Mi cuenta</div>
+          <h3 class="display" style="margin:6px 0 18px;">Cambiar contraseña</h3>
+          <div class="field"><label>Contraseña actual</label><input type="password" id="cp_current"></div>
+          <div class="field"><label>Nueva contraseña</label><input type="password" id="cp_new" placeholder="Mínimo 6 caracteres"></div>
+          <div class="field"><label>Confirmar nueva contraseña</label><input type="password" id="cp_confirm"></div>
+          ${state.modal.error ? `<p style="color:var(--danger);font-size:14px;">${esc(state.modal.error)}</p>` : ''}
+          <button class="btn btn-gold" id="cp_save" style="width:100%;margin-top:8px;">Guardar nueva contraseña</button>
+        </div>
+      </div>`;
   }
 }
 
 // Confirmación y avisos propios de la app: los diálogos nativos del navegador (confirm/alert)
 // pueden quedar bloqueados dentro del entorno donde corre esta app, así que se usan estos en su lugar.
+function generateRandomPassword(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let pw = '';
+  for(let i=0;i<8;i++) pw += chars[Math.floor(Math.random()*chars.length)];
+  return pw;
+}
+
 function openConfirm(message, onConfirm, confirmLabel){
   state.modal = {type:'confirm', message, onConfirm, confirmLabel};
   render();
@@ -2235,6 +2287,8 @@ function bindEvents(){
   if(cuentaPassword) cuentaPassword.oninput = (e)=>{ state.cuentaPasswordInput = e.target.value; };
   const cuentaSalir = document.getElementById('cuentaSalir');
   if(cuentaSalir) cuentaSalir.onclick = () => { state.clientPhone=''; state.clientName=''; render(); };
+  const btnChangePassword = document.getElementById('btnChangePassword');
+  if(btnChangePassword) btnChangePassword.onclick = () => { state.modal = {type:'changePassword', error:''}; render(); };
   document.querySelectorAll('[data-ticket]').forEach(b => b.onclick = () => openTicket(b.dataset.ticket));
   document.querySelectorAll('[data-statement]').forEach(b => b.onclick = () => openStatement(b.dataset.statement));
   document.querySelectorAll('[data-complete-request]').forEach(b => b.onclick = () => openCompleteRequest(b.dataset.completeRequest));
@@ -2547,6 +2601,57 @@ function bindEvents(){
   if(confirmNo) confirmNo.onclick = () => { state.modal = null; render(); };
   const notifyOk = document.getElementById('notifyOk');
   if(notifyOk) notifyOk.onclick = () => { state.modal = null; render(); };
+
+  // Cuentas: dar de alta clienta / generar-restablecer contraseña (admin)
+  const btnAdminNewCustomer = document.getElementById('btnAdminNewCustomer');
+  if(btnAdminNewCustomer) btnAdminNewCustomer.onclick = () => {
+    state.modal = {type:'adminSetPassword', isNew:true, name:'', phone:'', error:''};
+    render();
+  };
+  document.querySelectorAll('[data-admin-password]').forEach(b => b.onclick = () => {
+    state.modal = {type:'adminSetPassword', isNew:false, name:b.dataset.adminPasswordName||'', phone:b.dataset.adminPassword, error:''};
+    render();
+  });
+  const aspGenerate = document.getElementById('asp_generate');
+  if(aspGenerate) aspGenerate.onclick = () => {
+    const pwField = document.getElementById('asp_password');
+    if(pwField) pwField.value = generateRandomPassword();
+  };
+  const aspSave = document.getElementById('asp_save');
+  if(aspSave) aspSave.onclick = async () => {
+    const name = document.getElementById('asp_name').value.trim();
+    const phone = document.getElementById('asp_phone').value.replace(/\D/g,'');
+    const password = document.getElementById('asp_password').value;
+    if(!name){ state.modal.error = 'Ingresa el nombre.'; render(); return; }
+    if(phone.length !== 10){ state.modal.error = 'Ingresa un teléfono válido a 10 dígitos.'; render(); return; }
+    if(password.length < 6){ state.modal.error = 'La contraseña debe tener al menos 6 caracteres.'; render(); return; }
+
+    const { error } = await sb.rpc('admin_set_customer_password', {p_phone: phone, p_name: name, p_password: password});
+    if(error){ state.modal.error = 'No se pudo guardar. Intenta de nuevo.'; render(); return; }
+
+    let existing = state.customers.find(c=>c.phone===phone);
+    if(!existing){ state.customers.push({phone, name}); }
+    else { existing.name = name; }
+
+    state.modal = null;
+    notify('Contraseña guardada para ' + name + '. Compártesela para que pueda entrar a Mi Cuenta.');
+  };
+
+  // Mi Cuenta: cambiar mi propia contraseña
+  const cpSave = document.getElementById('cp_save');
+  if(cpSave) cpSave.onclick = async () => {
+    const current = document.getElementById('cp_current').value;
+    const nw = document.getElementById('cp_new').value;
+    const confirmNew = document.getElementById('cp_confirm').value;
+    if(nw.length < 6){ state.modal.error = 'La nueva contraseña debe tener al menos 6 caracteres.'; render(); return; }
+    if(nw !== confirmNew){ state.modal.error = 'Las contraseñas nuevas no coinciden.'; render(); return; }
+
+    const { data, error } = await sb.rpc('customer_change_password', {p_phone: state.clientPhone, p_current_password: current, p_new_password: nw});
+    if(error || data === 'error'){ state.modal.error = 'Tu contraseña actual no es correcta.'; render(); return; }
+
+    state.modal = null;
+    notify('Tu contraseña se actualizó correctamente.');
+  };
 
   // Enlace directo desde la notificación de "Nuevo pago por confirmar": desplaza y resalta esa tarjeta.
   if(state.deepLinkPaymentId && !state.deepLinkScrolled && state.view==='admin' && state.adminTab==='solicitudes' && state.adminAuthed){
