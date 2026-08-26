@@ -322,6 +322,7 @@ let state = {
   reportSelectedLoteId: null,  // si tiene valor, el reporte muestra SOLO esa recepción (no un rango combinado)
   viewingLoteId: null,
   cuentaPhoneInput: '',
+  cuentaNameInput: '',
   cuentaError: '',
   settingsWhatsappInput: '',
   deepLinkPaymentId: null,
@@ -1064,12 +1065,16 @@ function viewCuenta(){
       <div class="eyebrow">Mi cuenta</div>
       <h2 class="display" style="margin:8px 0 20px;">Consulta tus compras</h2>
       <div class="field" style="text-align:left;">
+        <label>Nombre completo</label>
+        <input type="text" id="cuentaName" placeholder="Nombre completo" value="${esc(state.cuentaNameInput)}">
+      </div>
+      <div class="field" style="text-align:left;">
         <label>Teléfono a 10 dígitos</label>
         <input type="tel" id="cuentaPhone" maxlength="10" placeholder="6621234567" value="${esc(state.cuentaPhoneInput)}">
       </div>
       ${state.cuentaError ? `<p style="color:var(--danger);font-size:14px;margin-top:-8px;">${esc(state.cuentaError)}</p>` : ''}
       <button class="btn btn-gold" id="cuentaEnter" style="width:100%;">Ver mi cuenta</button>
-      <p class="muted" style="margin-top:14px;">¿Aún no tienes cuenta? Se crea automáticamente en tu primera compra o solicitud.</p>
+      <p class="muted" style="margin-top:14px;">¿Aún no tienes cuenta? Se crea con tu nombre y teléfono la primera vez que entres.</p>
     </div>`;
   }
 
@@ -2144,6 +2149,8 @@ function bindEvents(){
   if(cuentaEnter) cuentaEnter.onclick = enterCuenta;
   const cuentaPhone = document.getElementById('cuentaPhone');
   if(cuentaPhone) cuentaPhone.oninput = (e)=>{ state.cuentaPhoneInput = e.target.value; };
+  const cuentaName = document.getElementById('cuentaName');
+  if(cuentaName) cuentaName.oninput = (e)=>{ state.cuentaNameInput = e.target.value; };
   const cuentaSalir = document.getElementById('cuentaSalir');
   if(cuentaSalir) cuentaSalir.onclick = () => { state.clientPhone=''; state.clientName=''; render(); };
   document.querySelectorAll('[data-ticket]').forEach(b => b.onclick = () => openTicket(b.dataset.ticket));
@@ -2472,12 +2479,27 @@ function changeQty(productId, delta){
   render();
 }
 
-function enterCuenta(){
+async function enterCuenta(){
+  const name = (state.cuentaNameInput||'').trim();
   const phone = (state.cuentaPhoneInput||'').replace(/\D/g,'');
+  if(!name){ state.cuentaError = 'Ingresa tu nombre.'; render(); return; }
   if(phone.length !== 10){ state.cuentaError = 'Ingresa un teléfono válido a 10 dígitos.'; render(); return; }
+
   const existing = state.customers.find(c=>c.phone===phone);
+  if(existing){
+    if(existing.name.trim().toLowerCase() !== name.toLowerCase()){
+      state.cuentaError = 'El nombre no coincide con el registrado para este teléfono.';
+      render();
+      return;
+    }
+    state.clientName = existing.name;
+  } else {
+    // primer acceso: se registra con el nombre y teléfono capturados aquí
+    state.customers.push({phone, name});
+    await saveCustomers();
+    state.clientName = name;
+  }
   state.clientPhone = phone;
-  state.clientName = existing ? existing.name : '';
   state.cuentaError = '';
   render();
 }
