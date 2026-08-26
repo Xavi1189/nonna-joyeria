@@ -767,7 +767,8 @@ async function saveSettings(){
   try{
     const { error } = await sb.from('settings').upsert(settingsToDb(state.settings), {onConflict:'id'});
     if(error) throw error;
-  }catch(err){ console.error('save settings failed', err); }
+    return true;
+  }catch(err){ console.error('save settings failed', err); return false; }
 }
 
 function seedProductsWithStock(){
@@ -2537,6 +2538,7 @@ function bindEvents(){
   if(stgSave) stgSave.onclick = async () => {
     const val = document.getElementById('stg_whatsapp').value.replace(/\D/g,'');
     if(val.length !== 10){ notify('Ingresa un número de WhatsApp válido a 10 dígitos.'); return; }
+    stgSave.disabled = true; stgSave.textContent = 'Guardando…';
     state.settings.whatsappNumber = val;
     state.settings.paymentInfo = {
       bankName: document.getElementById('stg_bank').value.trim(),
@@ -2544,8 +2546,8 @@ function bindEvents(){
       accountNumber: document.getElementById('stg_account').value.trim(),
       cardNumber: document.getElementById('stg_card').value.trim(),
     };
-    await saveSettings();
-    notify('Configuración guardada.');
+    const ok = await saveSettings();
+    notify(ok ? 'Configuración guardada.' : 'No se pudo guardar la configuración. Verifica tu conexión e intenta de nuevo.');
   };
 
   // Modal
