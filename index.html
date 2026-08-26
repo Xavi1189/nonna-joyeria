@@ -227,6 +227,9 @@
 const SUPABASE_URL = 'https://odplvcdbkvjsbgtlmwva.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_DihMwfcQFtb17KnrKt-DIg_kH3CIPah';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// URL fija donde vive la app publicada — se usa para armar los links de WhatsApp
+// (completar compra, pago por confirmar) para que siempre apunten al mismo lugar.
+const APP_URL = 'https://nonna-joyeria.vercel.app';
 
 /* ================= STATE ================= */
 
@@ -855,12 +858,10 @@ function paymentReqCardHtml(pr){
 }
 
 function buildCompraLink(requestId){
-  const base = window.location.href.split('#')[0];
-  return base + '#compra=' + encodeURIComponent(requestId);
+  return APP_URL + '#compra=' + encodeURIComponent(requestId);
 }
 function buildPagoLink(paymentRequestId){
-  const base = window.location.href.split('#')[0];
-  return base + '#pago=' + encodeURIComponent(paymentRequestId);
+  return APP_URL + '#pago=' + encodeURIComponent(paymentRequestId);
 }
 function buildRequestMessage(req){
   const lines = [
