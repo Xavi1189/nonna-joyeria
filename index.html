@@ -1725,9 +1725,9 @@ function adminCuentas(){
     const c = state.customers.find(x=>x.phone===state.viewingCustomerPhone);
     if(c) return customerAccountDetail(c);
   }
-  const allWithActivity = state.customers.filter(c => customerSales(c.phone).length > 0);
+  const allCustomers = [...state.customers].sort((a,b)=> a.name.localeCompare(b.name));
   const search = (state.cuentasSearch||'').trim().toLowerCase();
-  let filtered = allWithActivity;
+  let filtered = allCustomers;
   if(search){
     filtered = filtered.filter(c => c.name.toLowerCase().includes(search) || c.phone.includes(search));
   }
@@ -1735,27 +1735,31 @@ function adminCuentas(){
   const pageInfo = paginate(filtered, state.cuentasPage);
   state.cuentasPage = pageInfo.page;
   const rows = pageInfo.items.map(c => {
+    const hasSales = customerSales(c.phone).length > 0;
     const total = customerTotal(c.phone), abonado = customerAbonado(c.phone), saldo = customerSaldo(c.phone);
+    const estadoBadge = !hasSales
+      ? `<span class="badge pendiente">Sin compras</span>`
+      : `<span class="badge ${saldo<=0?'liquidada':'pendiente'}">${saldo<=0?'Liquidada':'Pendiente'}</span>`;
     return `
     <tr>
       <td class="clickable" data-view-customer="${esc(c.phone)}">${esc(c.name)}<div class="muted">${esc(c.phone)}</div></td>
       <td class="clickable" data-view-customer="${esc(c.phone)}">${money(total)}</td>
       <td class="clickable" data-view-customer="${esc(c.phone)}">${money(abonado)}</td>
       <td class="clickable" data-view-customer="${esc(c.phone)}">${money(saldo)}</td>
-      <td class="clickable" data-view-customer="${esc(c.phone)}"><span class="badge ${saldo<=0?'liquidada':'pendiente'}">${saldo<=0?'Liquidada':'Pendiente'}</span></td>
+      <td class="clickable" data-view-customer="${esc(c.phone)}">${estadoBadge}</td>
       <td style="text-align:right;"><button class="btn btn-sm btn-danger" data-delete-customer="${esc(c.phone)}">Eliminar</button></td>
     </tr>`;
   }).join('');
 
   return `
     <div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-      <h3 class="display" style="margin:0;">Cuentas de clientas (${allWithActivity.length})</h3>
+      <h3 class="display" style="margin:0;">Cuentas de clientas (${allCustomers.length})</h3>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="search"><input type="text" id="cuentasSearchInput" placeholder="Buscar por nombre o teléfono…" value="${esc(state.cuentasSearch)}"></div>
         <button class="btn btn-gold btn-sm" id="btnAdminNewCustomer">Dar de alta clienta</button>
       </div>
     </div>
-    ${allWithActivity.length===0 ? `<div class="empty"><div class="display">Aún no hay cuentas</div><p>Aparecerán aquí cuando una clienta realice su primera compra.</p></div>`
+    ${allCustomers.length===0 ? `<div class="empty"><div class="display">Aún no hay clientas registradas</div><p>Da de alta a la primera con el botón de arriba, o aparecerán solas cuando alguien compre o solicite un artículo.</p></div>`
       : filtered.length===0 ? `<div class="empty"><div class="display">Sin resultados</div><p>Prueba con otro nombre o teléfono.</p></div>`
       : `
     <div class="table-wrap"><table>
@@ -2154,6 +2158,8 @@ function renderModal(){
             </div>
           </div>
           <p class="muted">Comparte esta contraseña con la clienta — no queda visible en ningún otro lugar después de guardarla. Ella podrá cambiarla desde Mi Cuenta.</p>
+          <div class="field"><label>Adeudo inicial (opcional)</label><input id="asp_debt" type="number" min="0" step="0.01" placeholder="0.00"></div>
+          <p class="muted" style="margin-top:-8px;">Si esta clienta ya te debía algo de antes de usar la app, captúralo aquí para que su saldo salga correcto desde el inicio. Déjalo vacío si no aplica.</p>
           ${state.modal.error ? `<p style="color:var(--danger);font-size:14px;">${esc(state.modal.error)}</p>` : ''}
           <button class="btn btn-gold" id="asp_save" style="width:100%;margin-top:8px;">Guardar</button>
         </div>
@@ -2177,6 +2183,22 @@ function renderModal(){
 
 // Confirmación y avisos propios de la app: los diálogos nativos del navegador (confirm/alert)
 // pueden quedar bloqueados dentro del entorno donde corre esta app, así que se usan estos en su lugar.
+// Registra el adeudo que una clienta ya traía de antes de usar la app, como una compra
+// especial sin artículos reales — no descuenta inventario ni cuenta para los reportes de
+// ganancia por recepción (esos siguen basándose solo en lo vendido desde el catálogo).
+async function recordOpeningBalance(phone, name, amount){
+  const sale = {
+    id: genId('V'),
+    customerPhone: phone,
+    customerName: name,
+    items: [{productId: null, name: 'Saldo inicial (antes de este sistema)', qty: 1, price: amount, loteBreakdown: []}],
+    total: amount,
+    date: new Date().toISOString(),
+  };
+  state.sales.push(sale);
+  await saveSales();
+}
+
 function generateRandomPassword(){
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   let pw = '';
@@ -2660,19 +2682,25 @@ function bindEvents(){
     const name = document.getElementById('asp_name').value.trim();
     const phone = document.getElementById('asp_phone').value.replace(/\D/g,'');
     const password = document.getElementById('asp_password').value;
+    const debt = Number(document.getElementById('asp_debt').value || 0);
     if(!name){ state.modal.error = 'Ingresa el nombre.'; render(); return; }
     if(phone.length !== 10){ state.modal.error = 'Ingresa un teléfono válido a 10 dígitos.'; render(); return; }
     if(password.length < 6){ state.modal.error = 'La contraseña debe tener al menos 6 caracteres.'; render(); return; }
+    if(debt < 0){ state.modal.error = 'El adeudo inicial no puede ser negativo.'; render(); return; }
+
+    aspSave.disabled = true; aspSave.textContent = 'Guardando…';
 
     const { error } = await sb.rpc('admin_set_customer_password', {p_phone: phone, p_name: name, p_password: password});
-    if(error){ state.modal.error = 'No se pudo guardar. Intenta de nuevo.'; render(); return; }
+    if(error){ state.modal.error = 'No se pudo guardar. Intenta de nuevo.'; aspSave.disabled = false; aspSave.textContent = 'Guardar'; render(); return; }
 
     let existing = state.customers.find(c=>c.phone===phone);
     if(!existing){ state.customers.push({phone, name}); }
     else { existing.name = name; }
 
+    if(debt > 0){ await recordOpeningBalance(phone, name, debt); }
+
     state.modal = null;
-    notify('Contraseña guardada para ' + name + '. Compártesela para que pueda entrar a Mi Cuenta.');
+    notify('Contraseña guardada para ' + name + '. Compártesela para que pueda entrar a Mi Cuenta.' + (debt>0 ? ' Se registró su adeudo inicial de '+money(debt)+'.' : ''));
   };
 
   // Mi Cuenta: cambiar mi propia contraseña
