@@ -751,18 +751,20 @@ async function syncTable(table, idField, localRows, toDbFn){
       const { error: upErr } = await sb.from(table).upsert(rows, {onConflict:idField});
       if(upErr) throw upErr;
     }
+    return true;
   }catch(err){
     console.error('Error guardando en ' + table, err);
+    return false;
   }
 }
-async function saveProducts(){ await syncTable('products', 'id', state.products, productToDb); }
-async function saveSales(){ await syncTable('sales', 'id', state.sales, saleToDb); }
-async function saveCustomers(){ await syncTable('customers', 'phone', state.customers, customerToDb); }
-async function savePayments(){ await syncTable('payments', 'id', state.payments, paymentToDb); }
-async function saveLotes(){ await syncTable('lotes', 'id', state.lotes, loteToDb); }
-async function saveReturns(){ await syncTable('returns', 'id', state.returns, returnToDb); }
-async function saveRequests(){ await syncTable('requests', 'id', state.requests, requestToDb); }
-async function saveAbonoRequests(){ await syncTable('payment_requests', 'id', state.abonoRequests, paymentRequestToDb); }
+async function saveProducts(){ return await syncTable('products', 'id', state.products, productToDb); }
+async function saveSales(){ return await syncTable('sales', 'id', state.sales, saleToDb); }
+async function saveCustomers(){ return await syncTable('customers', 'phone', state.customers, customerToDb); }
+async function savePayments(){ return await syncTable('payments', 'id', state.payments, paymentToDb); }
+async function saveLotes(){ return await syncTable('lotes', 'id', state.lotes, loteToDb); }
+async function saveReturns(){ return await syncTable('returns', 'id', state.returns, returnToDb); }
+async function saveRequests(){ return await syncTable('requests', 'id', state.requests, requestToDb); }
+async function saveAbonoRequests(){ return await syncTable('payment_requests', 'id', state.abonoRequests, paymentRequestToDb); }
 async function saveSettings(){
   try{
     const { error } = await sb.from('settings').upsert(settingsToDb(state.settings), {onConflict:'id'});
@@ -3118,14 +3120,17 @@ async function saveLoteForm(){
     else { lote.items.push({productId:p.id, name:p.name, qtyReceived:it.qty}); }
   });
 
-  await saveProducts();
-  await saveLotes();
-  await saveReturns();
+  const savedProducts = await saveProducts();
+  const savedLotes = await saveLotes();
+  const savedReturns = await saveReturns();
   state.creatingLote = false;
   state.loteFormRows = [];
   state.loteFormMeta = null;
   state.loteFormTargetId = null;
   render();
+  if(!savedProducts || !savedLotes || !savedReturns){
+    notify('La recepción se guardó a medias — algo falló al escribir en la base de datos. Verifica tu conexión, o que tu sesión de administrador siga activa (intenta cerrar sesión y volver a entrar), y revisa que los artículos hayan quedado bien en Inventario.');
+  }
 }
 
 async function saveProductForm(){
@@ -3149,19 +3154,28 @@ async function saveProductForm(){
   const image = await uploadDataUrlToStorage(state.tempImageData || '', 'product-images', 'productos');
 
   const p = state.products.find(pp=>pp.id===state.editingProduct.id);
+  const backup = p ? {...p} : null;
   if(p) Object.assign(p, {name, sku, category, price, desc, image, onSale, salePrice});
+  const ok = await saveProducts();
   state.editingProduct = null;
   state.tempImageData = '';
   state.productFormDraft = null;
-  saveProducts().then(render);
+  if(!ok && p && backup){ Object.assign(p, backup); }
+  render();
+  if(!ok){ notify('No se pudo guardar el artículo. Verifica tu conexión, o que tu sesión de administrador siga activa (intenta cerrar sesión y volver a entrar).'); }
 }
 
 function deleteProduct(id){
   const p = state.products.find(pp=>pp.id===id);
   const label = p ? `"${p.name}"` : 'este artículo';
   openConfirm(`¿Eliminar ${label} del catálogo? Esta acción no se puede deshacer.`, async () => {
+    const backup = [...state.products];
     state.products = state.products.filter(pp=>pp.id!==id);
-    await saveProducts();
+    const ok = await saveProducts();
+    if(!ok){
+      state.products = backup;
+      notify('No se pudo eliminar el artículo. Puede que ya esté ligado a una devolución registrada, o que tu sesión de administrador haya expirado — intenta cerrar sesión y volver a entrar.');
+    }
   }, 'Sí, eliminar');
 }
 
