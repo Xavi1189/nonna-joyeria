@@ -2896,7 +2896,12 @@ async function submitCartRequest(){
     status: 'pendiente',
   };
   state.requests.push(req);
-  await saveRequests();
+  const ok = await saveRequests();
+  if(!ok){
+    state.requests = state.requests.filter(r => r.id !== req.id);
+    notify('No se pudo enviar tu solicitud. Verifica tu conexión e intenta de nuevo. Detalle técnico: ' + (lastSaveError||'desconocido'));
+    return;
+  }
   window.open(whatsappLink(buildRequestMessage(req), state.settings.whatsappNumber), '_blank');
   state.cart = [];
   state.cartOpen = false;
@@ -3006,7 +3011,12 @@ async function completeRequestPurchase(){
     date: new Date().toISOString(),
   };
   state.sales.push(sale);
-  await saveSales();
+  const savedSale = await saveSales();
+  if(!savedSale){
+    if(crConfirmBtn){ crConfirmBtn.disabled = false; crConfirmBtn.textContent = 'Confirmar compra'; }
+    notify('Ya se descontó la existencia pero no se pudo registrar tu compra. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Avísale a la tienda para que lo revisen — no vuelvas a intentar completar esta compra por ahora.');
+    return;
+  }
 
   req.status = 'completada';
   await saveRequests();
@@ -3028,7 +3038,12 @@ async function completeRequestPurchase(){
     status: 'pendiente',
   };
   state.abonoRequests.push(pr);
-  await saveAbonoRequests();
+  const savedPr = await saveAbonoRequests();
+  if(!savedPr){
+    state.abonoRequests = state.abonoRequests.filter(x => x.id !== pr.id);
+    notify('Tu compra se registró, pero no se pudo enviar tu pago para que lo confirmemos. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Contacta a la tienda para confirmar tu pago manualmente.');
+    return;
+  }
   window.open(whatsappLink(buildPaymentPendingMessage(pr), state.settings.whatsappNumber), '_blank');
 
   state.clientPhone = req.customerPhone;
@@ -3072,7 +3087,14 @@ async function submitSelfAbono(){
     status: 'pendiente',
   };
   state.abonoRequests.push(reqAbono);
-  await saveAbonoRequests();
+  const ok = await saveAbonoRequests();
+  if(!ok){
+    state.abonoRequests = state.abonoRequests.filter(r => r.id !== reqAbono.id);
+    if(saSendBtn){ saSendBtn.disabled = false; saSendBtn.textContent = 'Avisar por WhatsApp'; }
+    state.modal.error = 'No se pudo registrar tu abono. Verifica tu conexión e intenta de nuevo. Detalle técnico: ' + (lastSaveError||'desconocido');
+    render();
+    return;
+  }
   window.open(whatsappLink(buildPaymentPendingMessage(reqAbono), state.settings.whatsappNumber), '_blank');
   notify('Tu abono por ' + money(amount) + ' fue registrado. Se reflejará en tu cuenta en cuanto lo confirmemos.');
 }
@@ -3094,16 +3116,28 @@ async function registrarAbonoHandler(){
 async function acceptRequest(id){
   const req = state.requests.find(r=>r.id===id);
   if(!req) return;
+  const prevStatus = req.status;
   req.status = 'aceptada';
-  await saveRequests();
+  const ok = await saveRequests();
+  if(!ok){
+    req.status = prevStatus;
+    notify('No se pudo aceptar la solicitud. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Verifica tu conexión o vuelve a iniciar sesión.');
+    render();
+    return;
+  }
   window.open(whatsappLink(buildRequestAcceptedMessage(req), req.customerPhone), '_blank');
   render();
 }
 async function rejectRequest(id){
   const req = state.requests.find(r=>r.id===id);
   if(!req) return;
+  const prevStatus = req.status;
   req.status = 'rechazada';
-  await saveRequests();
+  const ok = await saveRequests();
+  if(!ok){
+    req.status = prevStatus;
+    notify('No se pudo rechazar la solicitud. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Verifica tu conexión o vuelve a iniciar sesión.');
+  }
   render();
 }
 
@@ -3115,10 +3149,23 @@ async function confirmAbonoRequest(id){
   if(state.deepLinkPaymentId === id) state.deepLinkPaymentId = null;
 
   if(r.type === 'compra'){
-    state.payments.push({id:genId('AB'), customerPhone:r.customerPhone, amount:r.amount, date:new Date().toISOString().slice(0,10), method:methodLabel});
-    await savePayments();
+    const payment = {id:genId('AB'), customerPhone:r.customerPhone, amount:r.amount, date:new Date().toISOString().slice(0,10), method:methodLabel};
+    state.payments.push(payment);
+    const savedPayment = await savePayments();
+    if(!savedPayment){
+      state.payments = state.payments.filter(p=>p.id!==payment.id);
+      notify('No se pudo confirmar el pago. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Verifica tu conexión o vuelve a iniciar sesión.');
+      render();
+      return;
+    }
     r.status = 'confirmado';
-    await saveAbonoRequests();
+    const savedPr = await saveAbonoRequests();
+    if(!savedPr){
+      notify('El pago se registró, pero no se pudo actualizar su estado a "confirmado". Detalle técnico: ' + (lastSaveError||'desconocido') + '. Vuelve a intentar confirmarlo.');
+      r.status = 'pendiente';
+      render();
+      return;
+    }
     const sale = state.sales.find(s=>s.id===r.saleId);
     if(sale) window.open(whatsappLink(buildTicket(sale), r.customerPhone), '_blank');
     render();
@@ -3129,15 +3176,34 @@ async function confirmAbonoRequest(id){
   const saldo = customerSaldo(r.customerPhone);
   if(saldo <= 0){
     r.status = 'confirmado';
-    await saveAbonoRequests();
+    const savedPr = await saveAbonoRequests();
+    if(!savedPr){
+      r.status = 'pendiente';
+      notify('No se pudo actualizar la solicitud. Detalle técnico: ' + (lastSaveError||'desconocido'));
+      render();
+      return;
+    }
     notify('Esta clienta ya no tiene saldo pendiente; se descartó la solicitud sin registrar un abono nuevo.');
     return;
   }
   const monto = Math.min(r.amount, saldo); // por si el saldo cambió desde que se solicitó
-  state.payments.push({id:genId('AB'), customerPhone:r.customerPhone, amount:monto, date:new Date().toISOString().slice(0,10), method:methodLabel});
-  await savePayments();
+  const payment = {id:genId('AB'), customerPhone:r.customerPhone, amount:monto, date:new Date().toISOString().slice(0,10), method:methodLabel};
+  state.payments.push(payment);
+  const savedPayment = await savePayments();
+  if(!savedPayment){
+    state.payments = state.payments.filter(p=>p.id!==payment.id);
+    notify('No se pudo registrar el abono. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Verifica tu conexión o vuelve a iniciar sesión.');
+    render();
+    return;
+  }
   r.status = 'confirmado';
-  await saveAbonoRequests();
+  const savedPr2 = await saveAbonoRequests();
+  if(!savedPr2){
+    notify('El abono se registró, pero no se pudo actualizar su estado a "confirmado". Detalle técnico: ' + (lastSaveError||'desconocido') + '. Vuelve a intentar confirmarlo.');
+    r.status = 'pendiente';
+    render();
+    return;
+  }
   window.open(whatsappLink(buildAccountStatement(r.customerPhone), r.customerPhone), '_blank');
   render();
 }
@@ -3145,8 +3211,13 @@ async function dismissAbonoRequest(id){
   const r = state.abonoRequests.find(x=>x.id===id);
   if(!r) return;
   if(state.deepLinkPaymentId === id) state.deepLinkPaymentId = null;
+  const prevStatus = r.status;
   r.status = 'rechazado';
-  await saveAbonoRequests();
+  const ok = await saveAbonoRequests();
+  if(!ok){
+    r.status = prevStatus;
+    notify('No se pudo descartar. Detalle técnico: ' + (lastSaveError||'desconocido'));
+  }
   render();
 }
 
