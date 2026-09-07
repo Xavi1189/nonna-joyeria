@@ -229,6 +229,15 @@ const SUPABASE_ANON_KEY = 'sb_publishable_DihMwfcQFtb17KnrKt-DIg_kH3CIPah';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true }
 });
+// Se registra de inmediato (antes de cualquier espera asíncrona) para no perder el evento
+// si el enlace de "recuperar contraseña" del correo llega justo durante la carga inicial.
+sb.auth.onAuthStateChange((event) => {
+  if(event === 'PASSWORD_RECOVERY'){
+    state.view = 'admin';
+    state.modal = {type:'adminResetPassword', error:''};
+    render();
+  }
+});
 // Sesión de "Mi Cuenta" (clientas): Supabase Auth solo cubre tu sesión de administrador;
 // la de las clientas la guardamos nosotros mismos para que no tengan que volver a
 // escribir su nombre, teléfono y contraseña cada vez que abren la app.
@@ -1246,6 +1255,7 @@ function viewAdmin(){
       </div>
       ${state.adminPassError ? `<p style="color:var(--danger);font-size:14px;margin-top:-8px;">${esc(state.adminPassError)}</p>` : ''}
       <button class="btn btn-gold" id="adminEnter" style="width:100%;">Entrar</button>
+      <button class="link-btn" id="adminForgotLink" style="margin-top:14px;">¿Olvidaste tu contraseña?</button>
     </div>`;
   }
 
@@ -2180,6 +2190,32 @@ function renderModal(){
           <button class="btn btn-gold" id="cp_save" style="width:100%;margin-top:8px;">Guardar nueva contraseña</button>
         </div>
       </div>`;
+  } else if(state.modal.type === 'adminForgotPassword'){
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+          <button class="modal-close" id="modalClose">&times;</button>
+          <div class="eyebrow">Administración</div>
+          <h3 class="display" style="margin:6px 0 18px;">Recuperar contraseña</h3>
+          <div class="field"><label>Correo</label><input type="email" id="afp_email" placeholder="tú@correo.com" value="${esc(state.modal.email||'')}"></div>
+          ${state.modal.error ? `<p style="color:var(--danger);font-size:14px;">${esc(state.modal.error)}</p>` : ''}
+          ${state.modal.sent ? `<p class="muted">Si ese correo tiene una cuenta de administrador, te acabamos de enviar un enlace para poner una contraseña nueva. Revisa tu bandeja de entrada (y spam).</p>` : ''}
+          <button class="btn btn-gold" id="afp_send" style="width:100%;margin-top:8px;">Enviar enlace de recuperación</button>
+        </div>
+      </div>`;
+  } else if(state.modal.type === 'adminResetPassword'){
+    root.innerHTML = `
+      <div class="modal-overlay">
+        <div class="modal">
+          <div class="eyebrow">Administración</div>
+          <h3 class="display" style="margin:6px 0 18px;">Nueva contraseña</h3>
+          <p class="muted">Escribe la contraseña nueva que quieres usar para entrar como administrador.</p>
+          <div class="field"><label>Nueva contraseña</label><input type="password" id="arp_new" placeholder="Mínimo 6 caracteres"></div>
+          <div class="field"><label>Confirmar nueva contraseña</label><input type="password" id="arp_confirm"></div>
+          ${state.modal.error ? `<p style="color:var(--danger);font-size:14px;">${esc(state.modal.error)}</p>` : ''}
+          <button class="btn btn-gold" id="arp_save" style="width:100%;margin-top:8px;">Guardar nueva contraseña</button>
+        </div>
+      </div>`;
   }
 }
 
@@ -2415,6 +2451,35 @@ function bindEvents(){
   if(adminSalir) adminSalir.onclick = async () => {
     await sb.auth.signOut();
     state.adminAuthed=false; state.adminTab='inventario'; state.viewingSaleId=null; render();
+  };
+  const adminForgotLink = document.getElementById('adminForgotLink');
+  if(adminForgotLink) adminForgotLink.onclick = () => {
+    const prefill = document.getElementById('adminEmail') ? document.getElementById('adminEmail').value.trim() : '';
+    state.modal = {type:'adminForgotPassword', email:prefill, error:'', sent:false};
+    render();
+  };
+  const afpSend = document.getElementById('afp_send');
+  if(afpSend) afpSend.onclick = async () => {
+    const email = document.getElementById('afp_email').value.trim();
+    if(!email){ state.modal.error = 'Ingresa tu correo.'; render(); return; }
+    afpSend.disabled = true; afpSend.textContent = 'Enviando…';
+    const { error } = await sb.auth.resetPasswordForEmail(email, {redirectTo: APP_URL});
+    state.modal.error = error ? 'No se pudo enviar el correo. Intenta de nuevo en unos minutos.' : '';
+    state.modal.sent = !error;
+    render();
+  };
+  const arpSave = document.getElementById('arp_save');
+  if(arpSave) arpSave.onclick = async () => {
+    const nw = document.getElementById('arp_new').value;
+    const confirmNew = document.getElementById('arp_confirm').value;
+    if(nw.length < 6){ state.modal.error = 'La nueva contraseña debe tener al menos 6 caracteres.'; render(); return; }
+    if(nw !== confirmNew){ state.modal.error = 'Las contraseñas no coinciden.'; render(); return; }
+    arpSave.disabled = true; arpSave.textContent = 'Guardando…';
+    const { error } = await sb.auth.updateUser({password: nw});
+    if(error){ state.modal.error = 'No se pudo actualizar la contraseña. Pide un nuevo enlace de recuperación.'; render(); return; }
+    state.modal = null;
+    state.adminAuthed = true;
+    notify('Tu contraseña se actualizó correctamente. Ya quedaste dentro.');
   };
 
   // Inventario (solo edición: el alta de artículos se hace desde Recepciones)
