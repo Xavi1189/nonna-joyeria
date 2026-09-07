@@ -1469,8 +1469,23 @@ function adminLotes(){
 
 function loteItemRow(row){
   const img = row.image || '';
+  const isExisting = !!row.existingProductId;
+  const existingProduct = isExisting ? state.products.find(p=>p.id===row.existingProductId) : null;
+  const existingOptions = [...state.products]
+    .sort((a,b)=> a.name.localeCompare(b.name))
+    .map(p => `<option value="${esc(p.id)}" ${row.existingProductId===p.id?'selected':''}>${esc(p.name)} — ${esc(p.category)} — ${money(p.price)}</option>`)
+    .join('');
+
   return `
   <div class="lote-item-box" data-lote-row="${row.id}">
+    <div class="field">
+      <label>Artículo</label>
+      <select data-row-existing="${row.id}">
+        <option value="">+ Artículo nuevo (crea una entrada distinta, con su propia foto)</option>
+        ${existingOptions}
+      </select>
+    </div>
+    ${!isExisting ? `
     <div class="field-row" style="align-items:flex-end;">
       <div class="field" style="flex:2;min-width:200px;"><label>Categoría</label>
         ${categoryFieldHtml('row_cat_'+row.id, row.category||'')}
@@ -1481,7 +1496,7 @@ function loteItemRow(row){
       <div class="field" style="flex:1;"><label>Cantidad recibida</label>
         <input type="number" min="1" step="1" data-row-qty="${row.id}" placeholder="0" value="${esc(row.qty||'')}">
       </div>
-      <div class="field" style="flex:2;min-width:160px;"><label>Nombre o detalle (opcional)</label>
+      <div class="field" style="flex:2;min-width:160px;"><label>Nombre o detalle</label>
         <input type="text" data-row-name="${row.id}" placeholder="Ej. arete mariposa" value="${esc(row.name||'')}">
       </div>
       <div class="field" style="flex:0 0 auto;">
@@ -1489,7 +1504,7 @@ function loteItemRow(row){
       </div>
     </div>
     <div class="field" style="margin-top:2px;">
-      <label>Fotografía (opcional)</label>
+      <label>Fotografía</label>
       <div class="img-upload-row">
         <div class="img-preview">${img ? `<img src="${img}" alt="">` : `<span class="muted" style="font-size:12px;">Sin imagen</span>`}</div>
         <div class="stack" style="gap:8px;">
@@ -1498,6 +1513,17 @@ function loteItemRow(row){
         </div>
       </div>
     </div>
+    ` : `
+    <div class="field-row" style="align-items:flex-end;">
+      <div class="field" style="flex:1;"><label>Cantidad recibida</label>
+        <input type="number" min="1" step="1" data-row-qty="${row.id}" placeholder="0" value="${esc(row.qty||'')}">
+      </div>
+      <div class="field" style="flex:0 0 auto;">
+        <button type="button" class="link-btn" data-row-remove="${row.id}">Quitar</button>
+      </div>
+    </div>
+    <p class="muted">Se sumará existencia a "${existingProduct?esc(existingProduct.name):''}"${existingProduct?(' ('+money(existingProduct.price)+')'):''} — sin cambiar su foto ni sus datos.</p>
+    `}
   </div>`;
 }
 
@@ -1530,6 +1556,7 @@ function captureLoteFormState(){
       qty: qtyEl ? qtyEl.value : row.qty,
       name: nameEl ? nameEl.value : row.name,
       image: row.image || '',
+      existingProductId: row.existingProductId || null,
     };
   });
 }
@@ -1570,7 +1597,7 @@ function loteForm(){
     </div>
     <div class="field"><label>Notas (opcional)</label><input id="lf_notes" placeholder="Observaciones de la recepción" value="${esc(meta.notes||'')}"></div>
     <h4 style="margin-top:20px;">Artículos recibidos</h4>
-    <p class="muted">Selecciona la categoría y el precio de cada artículo. Si ya tienes uno igual en tu catálogo, se suma a su existencia; si no, se da de alta automáticamente — no hace falta crear una entrada por cada pieza distinta.</p>
+    <p class="muted">Por default, cada artículo que agregues aquí se da de alta como una pieza nueva y distinta, con su propia foto. Si de verdad es una reposición exacta de algo que ya tienes en el catálogo, elígelo en "Artículo" para sumarle existencia en vez de crear otra entrada.</p>
     <div id="loteRows">${rows}</div>
     <button type="button" class="link-btn" id="lf_add_row" style="margin-top:6px;">+ Agregar artículo</button>
     <div style="display:flex;gap:10px;margin-top:22px;">
@@ -2528,7 +2555,7 @@ function bindEvents(){
     state.creatingLote = true;
     state.loteFormTargetId = null;
     state.loteFormMeta = {periodStart:'', periodEnd:'', provider:'', reference:'', notes:''};
-    state.loteFormRows = [{id:genId('R'), category:'', price:'', qty:'', name:'', image:''}];
+    state.loteFormRows = [{id:genId('R'), category:'', price:'', qty:'', name:'', image:'', existingProductId:null}];
     render();
   };
   const lfTarget = document.getElementById('lf_target');
@@ -2550,9 +2577,15 @@ function bindEvents(){
   const lfAddRow = document.getElementById('lf_add_row');
   if(lfAddRow) lfAddRow.onclick = () => {
     captureLoteFormState();
-    state.loteFormRows.push({id:genId('R'), category:'', price:'', qty:'', name:'', image:''});
+    state.loteFormRows.push({id:genId('R'), category:'', price:'', qty:'', name:'', image:'', existingProductId:null});
     render();
   };
+  document.querySelectorAll('[data-row-existing]').forEach(sel => sel.onchange = () => {
+    captureLoteFormState();
+    const row = state.loteFormRows.find(r => r.id === sel.dataset.rowExisting);
+    if(row) row.existingProductId = sel.value || null;
+    render();
+  });
   document.querySelectorAll('[data-row-remove]').forEach(b => b.onclick = () => {
     captureLoteFormState();
     state.loteFormRows = state.loteFormRows.filter(r => r.id !== b.dataset.rowRemove);
@@ -3125,22 +3158,34 @@ async function saveLoteForm(){
   const notes = (meta.notes||'').trim();
   if(!provider){ notify('Indica el proveedor de esta recepción.'); return; }
 
-  const validRows = state.loteFormRows.filter(row => row.category && Number(row.price||0) > 0 && Number(row.qty||0) > 0);
-  if(validRows.length === 0){ notify('Agrega al menos un artículo con categoría, precio y cantidad válidos.'); return; }
+  const validRows = state.loteFormRows.filter(row => {
+    if(row.existingProductId) return Number(row.qty||0) > 0;
+    return row.category && Number(row.price||0) > 0 && Number(row.qty||0) > 0;
+  });
+  if(validRows.length === 0){ notify('Agrega al menos un artículo (nuevo o ya existente) con cantidad válida.'); return; }
 
   const lfSaveBtn = document.getElementById('lf_save');
   if(lfSaveBtn){ lfSaveBtn.disabled = true; lfSaveBtn.textContent = 'Guardando…'; }
 
   const items = [];
   for(const row of validRows){
-    const image = await uploadDataUrlToStorage(row.image || '', 'product-images', 'productos');
-    items.push({
-      category: row.category,
-      price: Number(row.price || 0),
-      qty: Number(row.qty || 0),
-      name: (row.name||'').trim(),
-      image,
-    });
+    if(row.existingProductId){
+      const existingP = state.products.find(p=>p.id===row.existingProductId);
+      if(!existingP) continue;
+      items.push({
+        existingProductId: row.existingProductId,
+        qty: Number(row.qty || 0),
+      });
+    } else {
+      const image = await uploadDataUrlToStorage(row.image || '', 'product-images', 'productos');
+      items.push({
+        category: row.category,
+        price: Number(row.price || 0),
+        qty: Number(row.qty || 0),
+        name: (row.name||'').trim(),
+        image,
+      });
+    }
   }
 
   let lote;
@@ -3167,16 +3212,16 @@ async function saveLoteForm(){
   }
 
   items.forEach(it => {
-    // Se identifica el artículo por categoría + precio, no por nombre: así no hace falta
-    // dar de alta una entrada nueva cada vez que cambia la pieza exacta.
-    let p = state.products.find(pp => pp.category === it.category && Number(pp.price) === it.price);
-    if(!p){
-      // Los artículos se dan de alta aquí mismo, en la recepción — ya no en Inventario.
+    let p;
+    if(it.existingProductId){
+      // La admin eligió explícitamente sumar existencia a un artículo que ya tenía en su catálogo.
+      p = state.products.find(pp => pp.id === it.existingProductId);
+      if(!p) return;
+    } else {
+      // Cada renglón nuevo es un artículo distinto — ya no se agrupan automáticamente
+      // por categoría y precio, para no mezclar piezas diferentes bajo una sola foto.
       p = {id:genId('P'), name: it.name || it.category, sku:'', category: it.category, price: it.price, desc:'', image: it.image || '', stockEntries:[]};
       state.products.push(p);
-    } else if(it.image && !p.image){
-      // Si el artículo ya existía pero aún no tenía foto, se le agrega la que se subió aquí.
-      p.image = it.image;
     }
     p.stockEntries = p.stockEntries || [];
     let entry = p.stockEntries.find(e => e.loteId === lote.id);
