@@ -744,6 +744,7 @@ async function loadAll(){
 // Sincroniza una tabla completa con el array local: agrega/actualiza lo que hay,
 // y borra en la base lo que ya no está en el array (para que eliminar en la app
 // también elimine de verdad en Supabase).
+let lastSaveError = '';
 async function syncTable(table, idField, localRows, toDbFn){
   try{
     const { data: existing, error: selErr } = await sb.from(table).select(idField);
@@ -763,6 +764,8 @@ async function syncTable(table, idField, localRows, toDbFn){
     return true;
   }catch(err){
     console.error('Error guardando en ' + table, err);
+    const detail = (err && (err.message || err.details || err.hint || err.code)) || 'error desconocido';
+    lastSaveError = table + ': ' + detail;
     return false;
   }
 }
@@ -3186,15 +3189,19 @@ async function saveLoteForm(){
   });
 
   const savedProducts = await saveProducts();
+  const productsErr = savedProducts ? '' : lastSaveError;
   const savedLotes = await saveLotes();
+  const lotesErr = savedLotes ? '' : lastSaveError;
   const savedReturns = await saveReturns();
+  const returnsErr = savedReturns ? '' : lastSaveError;
   state.creatingLote = false;
   state.loteFormRows = [];
   state.loteFormMeta = null;
   state.loteFormTargetId = null;
   render();
   if(!savedProducts || !savedLotes || !savedReturns){
-    notify('La recepción se guardó a medias — algo falló al escribir en la base de datos. Verifica tu conexión, o que tu sesión de administrador siga activa (intenta cerrar sesión y volver a entrar), y revisa que los artículos hayan quedado bien en Inventario.');
+    const detail = [productsErr, lotesErr, returnsErr].filter(Boolean).join(' | ');
+    notify('La recepción se guardó a medias. Detalle técnico: ' + (detail || 'desconocido') + '. Verifica tu conexión, o que tu sesión de administrador siga activa (intenta cerrar sesión y volver a entrar), y revisa que los artículos hayan quedado bien en Inventario.');
   }
 }
 
@@ -3222,12 +3229,13 @@ async function saveProductForm(){
   const backup = p ? {...p} : null;
   if(p) Object.assign(p, {name, sku, category, price, desc, image, onSale, salePrice});
   const ok = await saveProducts();
+  const errDetail = lastSaveError;
   state.editingProduct = null;
   state.tempImageData = '';
   state.productFormDraft = null;
   if(!ok && p && backup){ Object.assign(p, backup); }
   render();
-  if(!ok){ notify('No se pudo guardar el artículo. Verifica tu conexión, o que tu sesión de administrador siga activa (intenta cerrar sesión y volver a entrar).'); }
+  if(!ok){ notify('No se pudo guardar el artículo. Detalle técnico: ' + (errDetail||'desconocido') + '. Verifica tu conexión, o que tu sesión de administrador siga activa (intenta cerrar sesión y volver a entrar).'); }
 }
 
 function deleteProduct(id){
@@ -3239,7 +3247,7 @@ function deleteProduct(id){
     const ok = await saveProducts();
     if(!ok){
       state.products = backup;
-      notify('No se pudo eliminar el artículo. Puede que ya esté ligado a una devolución registrada, o que tu sesión de administrador haya expirado — intenta cerrar sesión y volver a entrar.');
+      notify('No se pudo eliminar el artículo. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Puede que ya esté ligado a una devolución registrada, o que tu sesión de administrador haya expirado — intenta cerrar sesión y volver a entrar.');
     }
   }, 'Sí, eliminar');
 }
