@@ -714,18 +714,24 @@ function settingsToDb(s){
 
 /* ================= CARGA Y GUARDADO (Supabase) ================= */
 async function loadAll(){
+  const loadErrors = [];
   try{
-    const [productsRes, salesRes, customersRes, paymentsRes, lotesRes, returnsRes, requestsRes, prRes, settingsRes] = await Promise.all([
-      sb.from('products').select('*'),
-      sb.from('sales').select('*'),
-      sb.from('customers').select('*'),
-      sb.from('payments').select('*'),
-      sb.from('lotes').select('*'),
-      sb.from('returns').select('*'),
-      sb.from('requests').select('*'),
-      sb.from('payment_requests').select('*'),
-      sb.from('settings').select('*').eq('id','default').maybeSingle(),
-    ]);
+    const named = {
+      products: sb.from('products').select('*'),
+      sales: sb.from('sales').select('*'),
+      customers: sb.from('customers').select('phone,name'),
+      payments: sb.from('payments').select('*'),
+      lotes: sb.from('lotes').select('*'),
+      returns: sb.from('returns').select('*'),
+      requests: sb.from('requests').select('*'),
+      payment_requests: sb.from('payment_requests').select('*'),
+      settings: sb.from('settings').select('*').eq('id','default').maybeSingle(),
+    };
+    const keys = Object.keys(named);
+    const results = await Promise.all(keys.map(k => named[k]));
+    const [productsRes, salesRes, customersRes, paymentsRes, lotesRes, returnsRes, requestsRes, prRes, settingsRes] = results;
+    keys.forEach((k, i) => { if(results[i].error) loadErrors.push(k + ': ' + results[i].error.message); });
+
     state.products = (productsRes.data||[]).map(dbToProduct);
     state.sales = (salesRes.data||[]).map(dbToSale);
     state.customers = (customersRes.data||[]).map(dbToCustomer);
@@ -737,8 +743,13 @@ async function loadAll(){
     state.settings = settingsRes.data ? dbToSettings(settingsRes.data) : {whatsappNumber:'', paymentInfo:{bankName:'',accountHolder:'',accountNumber:'',cardNumber:''}};
   }catch(err){
     console.error('Error cargando datos de Supabase', err);
+    loadErrors.push(String(err && err.message || err));
   }
   state.loaded = true;
+  if(loadErrors.length){
+    console.error('Errores al cargar datos:', loadErrors);
+    state.loadErrorDetail = loadErrors.join(' | ');
+  }
 }
 
 // Sincroniza una tabla completa con el array local: agrega/actualiza lo que hay,
@@ -3523,6 +3534,9 @@ function handleDeepLink(){
   }
   handleDeepLink();
   render();
+  if(state.loadErrorDetail && state.adminAuthed){
+    notify('Algunos datos no se pudieron cargar. Detalle técnico: ' + state.loadErrorDetail);
+  }
 })();
 </script>
 </body>
