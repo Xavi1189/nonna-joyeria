@@ -2819,7 +2819,10 @@ function bindEvents(){
     aspSave.disabled = true; aspSave.textContent = 'Guardando…';
 
     const { error } = await sb.rpc('admin_set_customer_password', {p_phone: phone, p_name: name, p_password: password});
-    if(error){ state.modal.error = 'No se pudo guardar. Intenta de nuevo.'; aspSave.disabled = false; aspSave.textContent = 'Guardar'; render(); return; }
+    if(error){
+      state.modal.error = 'No se pudo guardar. Detalle técnico: ' + (error.message || error.details || error.hint || 'desconocido') + '. Verifica tu conexión o intenta cerrar sesión y volver a entrar.';
+      aspSave.disabled = false; aspSave.textContent = 'Guardar'; render(); return;
+    }
 
     let existing = state.customers.find(c=>c.phone===phone);
     if(!existing){ state.customers.push({phone, name}); }
