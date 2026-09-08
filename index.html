@@ -400,6 +400,20 @@ function quickRange(period){
   return {start: localDateStr(start), end: localDateStr(end)};
 }
 function genId(prefix){ return prefix + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,5).toUpperCase(); }
+
+// Cuenta especial para agrupar las ventas hechas en físico (mostrador), no ligadas a
+// ninguna clienta real con "Mi Cuenta" — así sí cuentan en los reportes de ganancia.
+const COUNTER_PHONE = '0000000000';
+const COUNTER_NAME = 'Venta en tienda (mostrador)';
+async function ensureCounterCustomer(){
+  let c = state.customers.find(x=>x.phone===COUNTER_PHONE);
+  if(!c){
+    c = {phone: COUNTER_PHONE, name: COUNTER_NAME};
+    state.customers.push(c);
+    await insertRow('customers', customerToDb, c);
+  }
+  return c;
+}
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // Abonos now apply to a customer's overall account, not to an individual sale.
@@ -1346,6 +1360,7 @@ function adminInventario(){
       <td>${priceCell}</td>
       <td>${productStock(p)}</td>
       <td style="text-align:right;white-space:nowrap;">
+        ${productStock(p)>0 ? `<button class="btn btn-sm btn-ghost" data-mark-sold="${p.id}">Vendido en tienda</button>` : ''}
         <button class="btn btn-sm btn-ghost" data-trace-product="${p.id}">Trazabilidad</button>
         <button class="btn btn-sm btn-ghost" data-edit-product="${p.id}">Editar</button>
         <button class="btn btn-sm btn-danger" data-del-product="${p.id}">Eliminar</button>
@@ -2282,6 +2297,34 @@ function renderModal(){
           <button class="btn btn-gold" id="arp_save" style="width:100%;margin-top:8px;">Guardar nueva contraseña</button>
         </div>
       </div>`;
+  } else if(state.modal.type === 'markSold'){
+    const p = state.products.find(pp=>pp.id===state.modal.productId);
+    const stock = p ? productStock(p) : 0;
+    const price = p ? effectivePrice(p) : 0;
+    const method = state.modal.method || 'efectivo';
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+          <button class="modal-close" id="modalClose">&times;</button>
+          <div class="eyebrow">Venta en tienda física</div>
+          <h3 class="display" style="margin:6px 0 6px;">${p?esc(p.name):''}</h3>
+          <p class="muted" style="margin:0 0 18px;">Existencia actual: <b>${stock}</b> · Precio: <b>${money(price)}</b> c/u</p>
+          <div class="field"><label>Cantidad vendida en tienda</label>
+            <input type="number" id="ms_qty" min="1" max="${stock}" step="1" value="${esc(state.modal.qty!=null?state.modal.qty:'')}" placeholder="0">
+          </div>
+          <button type="button" class="link-btn" id="ms_all">Marcar todo como agotado (${stock})</button>
+          <div class="field" style="margin-top:14px;">
+            <label>¿Cómo te pagaron?</label>
+            <div class="chips">
+              <button type="button" class="chip ${method==='efectivo'?'active':''}" data-ms-method="efectivo">Efectivo</button>
+              <button type="button" class="chip ${method==='tarjeta'?'active':''}" data-ms-method="tarjeta">Tarjeta (terminal física)</button>
+            </div>
+          </div>
+          ${state.modal.error ? `<p style="color:var(--danger);font-size:14px;margin-top:10px;">${esc(state.modal.error)}</p>` : ''}
+          <button class="btn btn-gold" id="ms_save" style="width:100%;margin-top:14px;">Registrar venta</button>
+          <p class="muted" style="margin-top:10px;">Se descuenta del catálogo (de las recepciones más antiguas primero) y se registra como una compra ya liquidada, a nombre de "Venta en tienda (mostrador)" — así sí cuenta en tus reportes de ganancia por recepción.</p>
+        </div>
+      </div>`;
   }
 }
 
@@ -2584,6 +2627,74 @@ function bindEvents(){
   document.querySelectorAll('[data-trace-product]').forEach(b => b.onclick = () => { state.viewingProductTraceId = b.dataset.traceProduct; render(); });
   const backToInventario = document.getElementById('backToInventario');
   if(backToInventario) backToInventario.onclick = () => { state.viewingProductTraceId = null; render(); };
+
+  document.querySelectorAll('[data-mark-sold]').forEach(b => b.onclick = () => {
+    state.modal = {type:'markSold', productId: b.dataset.markSold, qty:null, method:'efectivo', error:''};
+    render();
+  });
+  const msAll = document.getElementById('ms_all');
+  if(msAll) msAll.onclick = () => {
+    const p = state.products.find(pp=>pp.id===state.modal.productId);
+    const qtyEl = document.getElementById('ms_qty');
+    if(p && qtyEl) qtyEl.value = productStock(p);
+  };
+  document.querySelectorAll('[data-ms-method]').forEach(b => b.onclick = () => {
+    const qtyEl = document.getElementById('ms_qty');
+    if(qtyEl) state.modal.qty = qtyEl.value;
+    state.modal.method = b.dataset.msMethod;
+    render();
+  });
+  const msSave = document.getElementById('ms_save');
+  if(msSave) msSave.onclick = async () => {
+    const p = state.products.find(pp=>pp.id===state.modal.productId);
+    if(!p) return;
+    const qty = Number(document.getElementById('ms_qty').value || 0);
+    const method = state.modal.method || 'efectivo';
+    const stock = productStock(p);
+    if(qty <= 0 || qty > stock){ state.modal.error = 'Ingresa una cantidad entre 1 y ' + stock + '.'; render(); return; }
+
+    msSave.disabled = true; msSave.textContent = 'Guardando…';
+    const { data: breakdownResult, error } = await sb.rpc('consume_stock_multi', {items: [{productId: p.id, qty}]});
+    if(error){
+      state.modal.error = 'No se pudo descontar la existencia. Detalle técnico: ' + (error.message||'desconocido');
+      msSave.disabled = false; msSave.textContent = 'Registrar venta';
+      render();
+      return;
+    }
+    const { data: freshRow } = await sb.from('products').select('*').eq('id', p.id).maybeSingle();
+    if(freshRow){
+      const updated = dbToProduct(freshRow);
+      const idx = state.products.findIndex(pp=>pp.id===updated.id);
+      if(idx >= 0) state.products[idx] = updated;
+    }
+
+    // Registra la venta (a la cuenta especial de mostrador) para que cuente en tus reportes.
+    await ensureCounterCustomer();
+    const price = effectivePrice(p);
+    const bd = (breakdownResult||[]).find(b=>b.productId===p.id);
+    const sale = {
+      id: genId('V'),
+      customerPhone: COUNTER_PHONE,
+      customerName: COUNTER_NAME,
+      items: [{productId:p.id, name:p.name, qty, price, loteBreakdown: bd?bd.loteBreakdown:[]}],
+      total: price*qty,
+      date: new Date().toISOString(),
+    };
+    state.sales.push(sale);
+    const savedSale = await insertRow('sales', saleToDb, sale);
+    if(savedSale){
+      const payment = {id:genId('AB'), customerPhone:COUNTER_PHONE, amount: sale.total, date: new Date().toISOString().slice(0,10), method: method==='tarjeta'?'Tarjeta':'Efectivo'};
+      state.payments.push(payment);
+      await insertRow('payments', paymentToDb, payment);
+    }
+
+    state.modal = null;
+    if(!savedSale){
+      notify('Se descontó la existencia, pero no se pudo registrar la venta para tus reportes. Detalle técnico: ' + (lastSaveError||'desconocido') + '. El inventario ya quedó actualizado correctamente.');
+    } else {
+      notify('Se registraron ' + qty + ' pieza(s) vendidas de "' + p.name + '" en tienda — ya cuenta en tus reportes de ganancia.');
+    }
+  };
 
   // Lotes
   const newLoteBtn = document.getElementById('newLoteBtn');
