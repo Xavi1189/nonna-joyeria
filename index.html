@@ -821,6 +821,19 @@ async function updateRowFields(table, idField, idValue, fields){
     return false;
   }
 }
+// Borra únicamente las filas indicadas (por su id), sin tocar el resto de la tabla.
+async function deleteRows(table, idField, ids){
+  if(!ids.length) return true;
+  try{
+    const { error } = await sb.from(table).delete().in(idField, ids);
+    if(error) throw error;
+    return true;
+  }catch(err){
+    console.error('Error eliminando en ' + table, err);
+    lastSaveError = table + ': ' + ((err && (err.message || err.details || err.hint || err.code)) || 'error desconocido');
+    return false;
+  }
+}
 async function saveProducts(){ return await syncTable('products', 'id', state.products, productToDb); }
 async function saveSales(){ return await syncTable('sales', 'id', state.sales, saleToDb); }
 async function saveCustomers(){ return await syncTable('customers', 'phone', state.customers, customerToDb); }
@@ -2360,7 +2373,9 @@ async function recordOpeningBalance(phone, name, amount){
     date: new Date().toISOString(),
   };
   state.sales.push(sale);
-  await saveSales();
+  const ok = await insertRow('sales', saleToDb, sale);
+  if(!ok){ state.sales = state.sales.filter(s => s.id !== sale.id); }
+  return ok;
 }
 
 function generateRandomPassword(){
@@ -2971,10 +2986,15 @@ function bindEvents(){
     if(!existing){ state.customers.push({phone, name}); }
     else { existing.name = name; }
 
-    if(debt > 0){ await recordOpeningBalance(phone, name, debt); }
+    let debtOk = true;
+    if(debt > 0){ debtOk = await recordOpeningBalance(phone, name, debt); }
 
     state.modal = null;
-    notify('Contraseña guardada para ' + name + '. Compártesela para que pueda entrar a Mi Cuenta.' + (debt>0 ? ' Se registró su adeudo inicial de '+money(debt)+'.' : ''));
+    if(debt > 0 && !debtOk){
+      notify('Se guardó la contraseña de ' + name + ', pero NO se pudo registrar su adeudo inicial. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Intenta registrarlo de nuevo desde su cuenta.');
+    } else {
+      notify('Contraseña guardada para ' + name + '. Compártesela para que pueda entrar a Mi Cuenta.' + (debt>0 ? ' Se registró su adeudo inicial de '+money(debt)+'.' : ''));
+    }
   };
 
   // Mi Cuenta: cambiar mi propia contraseña
@@ -3600,23 +3620,29 @@ function confirmDeleteCustomer(phone){
 
 async function deleteCustomerAccount(phone){
   const sales = customerSales(phone);
+  const saleIds = sales.map(s=>s.id);
+  const paymentIds = customerPayments(phone).map(p=>p.id);
+  const requestIds = state.requests.filter(r=>r.customerPhone===phone).map(r=>r.id);
+  const abonoReqIds = state.abonoRequests.filter(r=>r.customerPhone===phone).map(r=>r.id);
+
   sales.forEach(s => restoreStockFromSale(s));
-  await saveProducts();
+  const okProducts = await saveProducts();
+  const okSales = await deleteRows('sales', 'id', saleIds);
+  const okPayments = await deleteRows('payments', 'id', paymentIds);
+  const okRequests = await deleteRows('requests', 'id', requestIds);
+  const okAbono = await deleteRows('payment_requests', 'id', abonoReqIds);
+  const okCustomer = await deleteRows('customers', 'phone', [phone]);
+
+  if(!okProducts || !okSales || !okPayments || !okRequests || !okAbono || !okCustomer){
+    notify('No se pudo eliminar por completo a la clienta. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Es posible que haya quedado información parcial — revisa e intenta de nuevo.');
+    return;
+  }
 
   state.sales = state.sales.filter(s=>s.customerPhone!==phone);
-  await saveSales();
-
   state.payments = state.payments.filter(p=>p.customerPhone!==phone);
-  await savePayments();
-
   state.requests = state.requests.filter(r=>r.customerPhone!==phone);
-  await saveRequests();
-
   state.abonoRequests = state.abonoRequests.filter(r=>r.customerPhone!==phone);
-  await saveAbonoRequests();
-
   state.customers = state.customers.filter(c=>c.phone!==phone);
-  await saveCustomers();
 
   if(state.viewingCustomerPhone === phone) state.viewingCustomerPhone = null;
   if(state.clientPhone === phone){ state.clientPhone = ''; state.clientName = ''; }
