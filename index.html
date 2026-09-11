@@ -269,119 +269,193 @@ const APP_URL = 'https://nonna-joyeria.vercel.app';
 function svgTile(inner){
   return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">${inner}</svg>`;
 }
-// Cada ícono se dibuja en su propia caja de 60x60 centrada en (30,30), con trazo grueso
-// y redondeado (estilo marcador/dibujado a mano). Los colores se les pasan al armar el mosaico.
+// Cada ícono se dibuja en su propia caja de 60x60 centrada en (30,30). Ahora con contorno,
+// sombreado y brillos (calculados a partir del color base) para que se sientan ilustrados,
+// no como íconos planos.
+function shadeColor(hex, percent){
+  const num = parseInt(hex.replace('#',''), 16);
+  let r = (num >> 16) + Math.round(255*percent);
+  let g = ((num >> 8) & 0x00FF) + Math.round(255*percent);
+  let b = (num & 0x0000FF) + Math.round(255*percent);
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+  return '#' + (0x1000000 + r*0x10000 + g*0x100 + b).toString(16).slice(1);
+}
 function iconCactus(c){
-  return `<g stroke="${c}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M30 52 V14"/>
-    <path d="M30 40 Q30 27 19 27 Q19 35 19 40"/>
-    <path d="M30 33 Q30 22 41 22 Q41 29 41 33"/>
-  </g>`;
+  const dark = shadeColor(c,-0.28), light = shadeColor(c,0.35);
+  return `<ellipse cx="30" cy="54" rx="12" ry="3" fill="${dark}" opacity=".35"/>
+    <g stroke="${dark}" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M30 52 V14"/>
+      <path d="M30 40 Q30 27 19 27 Q19 35 19 40"/>
+      <path d="M30 33 Q30 22 41 22 Q41 29 41 33"/>
+    </g>
+    <g stroke="${c}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M30 52 V14"/>
+      <path d="M30 40 Q30 27 19 27 Q19 35 19 40"/>
+      <path d="M30 33 Q30 22 41 22 Q41 29 41 33"/>
+    </g>
+    <g stroke="${light}" stroke-width="1.2" stroke-linecap="round">
+      <path d="M27 20 l-3 3M27 30 l-3 3M27 40 l-3 3"/>
+    </g>
+    <circle cx="19" cy="26" r="2.6" fill="#E8618A"/>
+    <circle cx="41" cy="21" r="2.2" fill="#F2C744"/>`;
 }
 function iconSombrero(c){
-  return `<g stroke="${c}" stroke-width="3.4" stroke-linecap="round" fill="none">
-    <ellipse cx="30" cy="42" rx="21" ry="5.5"/>
-    <path d="M17 41 Q17 25 30 23 Q43 25 43 41"/>
-  </g>`;
+  const dark = shadeColor(c,-0.3), light = shadeColor(c,0.3);
+  return `<g stroke="${dark}" stroke-width="4.6" stroke-linecap="round" fill="none">
+      <ellipse cx="30" cy="42" rx="21" ry="5.5"/>
+      <path d="M17 41 Q17 25 30 23 Q43 25 43 41"/>
+    </g>
+    <g stroke="${c}" stroke-width="3" stroke-linecap="round" fill="none">
+      <ellipse cx="30" cy="42" rx="21" ry="5.5"/>
+      <path d="M17 41 Q17 25 30 23 Q43 25 43 41"/>
+    </g>
+    <path d="M22 36 Q30 40 38 36" stroke="${light}" stroke-width="1.6" fill="none"/>
+    <circle cx="30" cy="30" r="2" fill="${light}"/>`;
 }
 function iconPartyHat(c){
-  return `<path d="M22 50 L30 15 L38 50 Z" stroke="${c}" stroke-width="3.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/><circle cx="30" cy="12" r="3.6" fill="${c}"/>`;
+  const dark = shadeColor(c,-0.25), light = shadeColor(c,0.3);
+  return `<path d="M22 50 L30 15 L38 50 Z" fill="${c}" stroke="${dark}" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M24 44 L36 44 M25.5 36 L34.5 36 M27 28 L33 28" stroke="${light}" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="30" cy="12" r="4" fill="${light}" stroke="${dark}" stroke-width="1.4"/>`;
 }
 function iconHeart(c){
-  return `<path d="M30 47 C15 35 11 23 20 17 C26 13 30 19 30 22 C30 19 34 13 40 17 C49 23 45 35 30 47 Z" fill="${c}"/>`;
+  const dark = shadeColor(c,-0.25), light = shadeColor(c,0.4);
+  return `<path d="M30 47 C15 35 11 23 20 17 C26 13 30 19 30 22 C30 19 34 13 40 17 C49 23 45 35 30 47 Z" fill="${c}" stroke="${dark}" stroke-width="2.2"/>
+    <path d="M19 21 C22 18 26 19 27 23" stroke="${light}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
 }
 function iconFlower(c){
-  return `<g stroke="${c}" stroke-width="3" fill="none" stroke-linecap="round">
-    <circle cx="30" cy="30" r="5.4"/>
-    <path d="M30 9 Q36 20 30 26 Q24 20 30 9"/>
-    <path d="M30 51 Q36 40 30 34 Q24 40 30 51"/>
-    <path d="M9 30 Q20 24 26 30 Q20 36 9 30"/>
-    <path d="M51 30 Q40 24 34 30 Q40 36 51 30"/>
-  </g>`;
+  const dark = shadeColor(c,-0.25), light = shadeColor(c,0.35);
+  return `<g fill="${c}" stroke="${dark}" stroke-width="1.6">
+      <ellipse cx="30" cy="16" rx="6" ry="9"/>
+      <ellipse cx="30" cy="44" rx="6" ry="9"/>
+      <ellipse cx="16" cy="30" rx="9" ry="6"/>
+      <ellipse cx="44" cy="30" rx="9" ry="6"/>
+    </g>
+    <circle cx="30" cy="30" r="6.5" fill="#F2C744" stroke="${dark}" stroke-width="1.6"/>
+    <circle cx="28" cy="28" r="1.6" fill="${light}"/>`;
 }
 function iconButterfly(c){
-  return `<g fill="${c}">
-    <path d="M30 30 Q15 11 7 22 Q13 34 30 30 Z"/>
-    <path d="M30 30 Q45 11 53 22 Q47 34 30 30 Z"/>
-    <path d="M30 30 Q19 43 11 39 Q15 48 30 37 Z"/>
-    <path d="M30 30 Q41 43 49 39 Q45 48 30 37 Z"/>
-  </g><line x1="30" y1="17" x2="30" y2="43" stroke="${c}" stroke-width="2.4" stroke-linecap="round"/>`;
+  const dark = shadeColor(c,-0.3), light = shadeColor(c,0.4);
+  return `<g fill="${c}" stroke="${dark}" stroke-width="1.6">
+      <path d="M30 30 Q15 11 7 22 Q13 34 30 30 Z"/>
+      <path d="M30 30 Q45 11 53 22 Q47 34 30 30 Z"/>
+      <path d="M30 30 Q19 43 11 39 Q15 48 30 37 Z"/>
+      <path d="M30 30 Q41 43 49 39 Q45 48 30 37 Z"/>
+    </g>
+    <circle cx="18" cy="20" r="1.8" fill="${light}"/>
+    <circle cx="42" cy="20" r="1.8" fill="${light}"/>
+    <line x1="30" y1="17" x2="30" y2="43" stroke="${dark}" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="27" cy="15" r="1.2" fill="${dark}"/><circle cx="33" cy="15" r="1.2" fill="${dark}"/>`;
 }
 function iconSun(c){
-  return `<circle cx="30" cy="30" r="9.4" fill="${c}"/>
-    <g stroke="${c}" stroke-width="3.4" stroke-linecap="round">
-      <path d="M30 5v7M30 48v7M5 30h7M48 30h7M13 13l5 5M42 42l5 5M47 13l-5 5M13 42l5 5"/>
-    </g>`;
+  const dark = shadeColor(c,-0.25), light = shadeColor(c,0.4);
+  return `<g stroke="${c}" stroke-width="4.4" stroke-linecap="round">
+      <path d="M30 4v6M30 50v6M4 30h6M50 30h6M12 12l4.2 4.2M43.8 43.8l4.2 4.2M48 12l-4.2 4.2M16.2 43.8l-4.2 4.2"/>
+    </g>
+    <circle cx="30" cy="30" r="10.4" fill="${c}" stroke="${dark}" stroke-width="1.8"/>
+    <circle cx="26" cy="26" r="2.6" fill="${light}"/>`;
 }
 function iconWave(c){
-  return `<path d="M5 34 Q14 23 23 34 Q30 45 39 34 Q47 23 55 34" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  const dark = shadeColor(c,-0.2), light = shadeColor(c,0.4);
+  return `<path d="M4 40 Q13 30 22 40 Q29 50 38 40 Q47 30 56 40" stroke="${dark}" stroke-width="4.4" fill="none" stroke-linecap="round" opacity=".5"/>
+    <path d="M4 32 Q13 21 22 32 Q30 43 38 32 Q47 21 56 32" stroke="${c}" stroke-width="4.4" fill="none" stroke-linecap="round"/>
+    <circle cx="16" cy="24" r="1.6" fill="${light}"/><circle cx="40" cy="24" r="1.6" fill="${light}"/>`;
 }
 function iconPumpkin(c){
-  return `<ellipse cx="30" cy="35" rx="17.5" ry="13.5" fill="${c}"/>
-    <path d="M30 22 Q27 13 33 8" stroke="${c}" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+  const dark = shadeColor(c,-0.3), light = shadeColor(c,0.3);
+  return `<ellipse cx="30" cy="35" rx="17.5" ry="13.5" fill="${c}" stroke="${dark}" stroke-width="2"/>
+    <path d="M18 26 Q18 44 18 44 M24 24 Q24 46 24 46 M36 24 Q36 46 36 46 M42 26 Q42 44 42 44" stroke="${dark}" stroke-width="1.4" fill="none" opacity=".5"/>
+    <path d="M30 22 Q27 13 33 8" stroke="#6E8F4A" stroke-width="3.4" fill="none" stroke-linecap="round"/>
     <g fill="var(--cream)">
       <path d="M21 31 L26 35 L21 39 Z"/>
       <path d="M39 31 L34 35 L39 39 Z"/>
       <path d="M23 43 Q30 48 37 43 L33 41 L30 43 L27 41 Z"/>
-    </g>`;
+    </g>
+    <ellipse cx="24" cy="29" rx="3" ry="2" fill="${light}" opacity=".6"/>`;
 }
 function iconBat(c){
-  return `<g fill="${c}">
-    <ellipse cx="30" cy="32" rx="3.2" ry="4.8"/>
-    <path d="M30 27 Q15 12 5 22 Q14 30 27 29 Z"/>
-    <path d="M30 27 Q45 12 55 22 Q46 30 33 29 Z"/>
-  </g>`;
+  const dark = shadeColor(c,-0.3);
+  return `<g fill="${c}" stroke="${dark}" stroke-width="1.4">
+      <ellipse cx="30" cy="32" rx="3.4" ry="5"/>
+      <path d="M30 27 Q15 12 5 22 Q14 30 27 29 Z"/>
+      <path d="M30 27 Q45 12 55 22 Q46 30 33 29 Z"/>
+    </g>
+    <path d="M12 20 Q18 22 24 27 M48 20 Q42 22 36 27" stroke="${dark}" stroke-width="1" fill="none" opacity=".6"/>
+    <circle cx="28.4" cy="30" r=".7" fill="var(--cream)"/><circle cx="31.6" cy="30" r=".7" fill="var(--cream)"/>`;
 }
 function iconSkull(c){
-  return `<g fill="${c}">
-    <circle cx="30" cy="27" r="14.4"/>
-    <path d="M17 37 Q30 51 43 37 Q37 45 30 45 Q23 45 17 37 Z"/>
-  </g>
-  <g fill="var(--cream)">
-    <ellipse cx="23" cy="25" rx="4.2" ry="5.6"/>
-    <ellipse cx="37" cy="25" rx="4.2" ry="5.6"/>
-    <path d="M27 35 L30 40 L33 35 Z"/>
-  </g>`;
+  const dark = shadeColor(c,-0.25);
+  return `<g fill="${c}" stroke="${dark}" stroke-width="1.6">
+      <circle cx="30" cy="27" r="14.4"/>
+      <path d="M17 37 Q30 51 43 37 Q37 45 30 45 Q23 45 17 37 Z"/>
+    </g>
+    <g fill="var(--cream)">
+      <ellipse cx="23" cy="25" rx="4.2" ry="5.6"/>
+      <ellipse cx="37" cy="25" rx="4.2" ry="5.6"/>
+      <path d="M27 35 L30 40 L33 35 Z"/>
+    </g>
+    <path d="M20 18 Q23 15 26 18" stroke="#E85D8A" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <path d="M34 18 Q37 15 40 18" stroke="#E85D8A" stroke-width="1.6" fill="none" stroke-linecap="round"/>`;
 }
 function iconMarigold(c){
-  return `<g fill="${c}">
-    <circle cx="30" cy="30" r="5.6"/>
-    <ellipse cx="30" cy="14" rx="4.4" ry="7.8"/>
-    <ellipse cx="30" cy="46" rx="4.4" ry="7.8"/>
-    <ellipse cx="14" cy="30" rx="7.8" ry="4.4"/>
-    <ellipse cx="46" cy="30" rx="7.8" ry="4.4"/>
-    <ellipse cx="18" cy="18" rx="5.4" ry="5.4" transform="rotate(45 18 18)"/>
-    <ellipse cx="42" cy="18" rx="5.4" ry="5.4" transform="rotate(-45 42 18)"/>
-    <ellipse cx="18" cy="42" rx="5.4" ry="5.4" transform="rotate(-45 18 42)"/>
-    <ellipse cx="42" cy="42" rx="5.4" ry="5.4" transform="rotate(45 42 42)"/>
-  </g>`;
+  const dark = shadeColor(c,-0.25), light = shadeColor(c,0.35);
+  return `<g fill="${c}" stroke="${dark}" stroke-width="1.4">
+      <ellipse cx="30" cy="14" rx="4.4" ry="7.8"/>
+      <ellipse cx="30" cy="46" rx="4.4" ry="7.8"/>
+      <ellipse cx="14" cy="30" rx="7.8" ry="4.4"/>
+      <ellipse cx="46" cy="30" rx="7.8" ry="4.4"/>
+      <ellipse cx="18" cy="18" rx="5.4" ry="5.4" transform="rotate(45 18 18)"/>
+      <ellipse cx="42" cy="18" rx="5.4" ry="5.4" transform="rotate(-45 42 18)"/>
+      <ellipse cx="18" cy="42" rx="5.4" ry="5.4" transform="rotate(-45 18 42)"/>
+      <ellipse cx="42" cy="42" rx="5.4" ry="5.4" transform="rotate(45 42 42)"/>
+    </g>
+    <circle cx="30" cy="30" r="6" fill="${light}" stroke="${dark}" stroke-width="1.4"/>`;
 }
 function iconTree(c){
-  return `<path d="M30 5 L41 22 L34 22 L45 37 L36 37 L49 52 L11 52 L24 37 L15 37 L26 22 L19 22 Z" fill="${c}"/><rect x="27" y="52" width="6" height="6" fill="${c}"/>`;
+  const dark = shadeColor(c,-0.25);
+  return `<path d="M30 5 L41 22 L34 22 L45 37 L36 37 L49 52 L11 52 L24 37 L15 37 L26 22 L19 22 Z" fill="${c}" stroke="${dark}" stroke-width="1.8"/>
+    <rect x="27" y="52" width="6" height="6" fill="${dark}"/>
+    <circle cx="24" cy="30" r="2" fill="#F2C744"/>
+    <circle cx="36" cy="42" r="2" fill="#E23D3D"/>
+    <circle cx="30" cy="16" r="1.8" fill="#F2C744"/>`;
 }
 function iconStar(c){
-  return `<path d="M30 7 l3.1 9.6 10 .1-8 6.2 3 9.6-8.1-6-8.1 6 3-9.6-8-6.2 10-.1z" fill="${c}"/>`;
+  const dark = shadeColor(c,-0.25), light = shadeColor(c,0.4);
+  return `<path d="M30 7 l3.1 9.6 10 .1-8 6.2 3 9.6-8.1-6-8.1 6 3-9.6-8-6.2 10-.1z" fill="${c}" stroke="${dark}" stroke-width="1.6"/>
+    <circle cx="30" cy="24" r="1.6" fill="${light}"/>`;
 }
 function iconMoon(c){
-  return `<path d="M36 12 A18 18 0 1 0 36 48 A13 13 0 1 1 36 12 Z" fill="${c}"/>`;
+  const dark = shadeColor(c,-0.2);
+  return `<path d="M36 12 A18 18 0 1 0 36 48 A13 13 0 1 1 36 12 Z" fill="${c}" stroke="${dark}" stroke-width="1.6"/>
+    <circle cx="22" cy="24" r="1.6" fill="${dark}" opacity=".4"/>
+    <circle cx="18" cy="34" r="1.1" fill="${dark}" opacity=".4"/>`;
 }
 function iconLadder(c){
-  return `<g stroke="${c}" stroke-width="3.4" stroke-linecap="round">
-    <line x1="21" y1="9" x2="21" y2="51"/>
-    <line x1="39" y1="9" x2="39" y2="51"/>
-    <line x1="21" y1="17" x2="39" y2="17"/>
-    <line x1="21" y1="27" x2="39" y2="27"/>
-    <line x1="21" y1="37" x2="39" y2="37"/>
-    <line x1="21" y1="47" x2="39" y2="47"/>
-  </g>`;
+  const dark = shadeColor(c,-0.25);
+  return `<g stroke="${c}" stroke-width="4" stroke-linecap="round">
+      <line x1="21" y1="9" x2="21" y2="51"/>
+      <line x1="39" y1="9" x2="39" y2="51"/>
+      <line x1="21" y1="17" x2="39" y2="17"/>
+      <line x1="21" y1="27" x2="39" y2="27"/>
+      <line x1="21" y1="37" x2="39" y2="37"/>
+      <line x1="21" y1="47" x2="39" y2="47"/>
+    </g>
+    <g stroke="${dark}" stroke-width="1.2" opacity=".5">
+      <line x1="24" y1="9" x2="24" y2="51"/>
+      <line x1="42" y1="9" x2="42" y2="51"/>
+    </g>`;
 }
 function iconDrum(c){
-  return `<rect x="15" y="21" width="30" height="21" rx="2" fill="${c}"/>
-    <ellipse cx="30" cy="21" rx="15" ry="5.4" fill="${c}"/>
+  const dark = shadeColor(c,-0.25), light = shadeColor(c,0.35);
+  return `<rect x="15" y="21" width="30" height="21" rx="2" fill="${c}" stroke="${dark}" stroke-width="1.8"/>
+    <ellipse cx="30" cy="21" rx="15" ry="5.4" fill="${light}" stroke="${dark}" stroke-width="1.6"/>
     <g stroke="var(--cream)" stroke-width="2.2">
       <line x1="16" y1="25" x2="44" y2="38"/>
       <line x1="16" y1="38" x2="44" y2="25"/>
-    </g>`;
+    </g>
+    <ellipse cx="30" cy="42" rx="15" ry="4" fill="${dark}" opacity=".4"/>`;
 }
 // Compone 2 íconos (con sus propios colores de la paleta del mes) más unos puntos de confeti.
 function motifIcons(icons, palette, mult){
