@@ -378,6 +378,43 @@ function motifIcons(icons, palette, mult){
       <circle cx="112" cy="72" r="2.1"/>
     </g>`);
 }
+// Motivo tipo mandala/talavera (flor central + acentos "llama"/paisley + borde de
+// diamantes), diseño propio inspirado en el estilo de patrones textiles mexicanos.
+function rosettePath(cx, cy, outerR, innerR, petalRy, petalRx, count, color){
+  let s = `<circle cx="${cx}" cy="${cy}" r="${innerR}" fill="${color}"/>`;
+  for(let i=0;i<count;i++){
+    const deg = i*(360/count);
+    s += `<ellipse cx="${cx}" cy="${cy-outerR}" rx="${petalRx}" ry="${petalRy}" fill="${color}" transform="rotate(${deg} ${cx} ${cy})"/>`;
+  }
+  return s;
+}
+function flameAccent(cx, cy, rot, scale, color){
+  return `<path d="M0 -2 C -7 -11 -5 -23 0 -29 C 5 -23 7 -11 0 -2 Z" fill="${color}" transform="translate(${cx} ${cy}) rotate(${rot}) scale(${scale})"/>`;
+}
+function diamondShape(cx, cy, s, color){
+  return `<path d="M${cx} ${cy-s} L${cx+s} ${cy} L${cx} ${cy+s} L${cx-s} ${cy} Z" fill="${color}"/>`;
+}
+function motifMandala(main, accent, mult){
+  mult = mult==null ? 1 : mult;
+  const op = (v) => Math.min(1, v*mult);
+  const W = 100, H = 140;
+  let diamonds = '';
+  for(let y=10; y<H; y+=20){
+    diamonds += diamondShape(8, y, 4, main) + diamondShape(W-8, y, 4, main);
+  }
+  const flower = rosettePath(50, 58, 17, 7, 15, 7, 10, main);
+  const flames = [
+    flameAccent(24, 40, -35, 0.9, main),
+    flameAccent(76, 40, 35, 0.9, main),
+    flameAccent(24, 78, 215, 0.9, main),
+    flameAccent(76, 78, 145, 0.9, main),
+  ].join('');
+  const dots = `<circle cx="50" cy="30" r="2" fill="${accent}"/><circle cx="50" cy="90" r="2" fill="${accent}"/><circle cx="35" cy="58" r="1.6" fill="${accent}"/><circle cx="65" cy="58" r="1.6" fill="${accent}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <g opacity="${op(.55)}">${diamonds}</g>
+    <g opacity="${op(.95)}">${flower}${flames}${dots}</g>
+  </svg>`;
+}
 const MONTH_THEMES = [
   {label:'Fiestas', gold:'#B8860B', goldLight:'#D9A93F', tagline:'Empezamos el año brillando', palette:['#C9A227','#E85D3C','#2E7D4F','#E3B23C'], icons:[iconPartyHat, iconStar]},
   {label:'Amor', gold:'#B23A5C', goldLight:'#D98BA3', tagline:'Regala lo que enamora', palette:['#D9436A','#A662C9','#E88AA5','#F2C744'], icons:[iconHeart, iconFlower]},
@@ -387,7 +424,7 @@ const MONTH_THEMES = [
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
-  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42'], icons:[iconCactus, iconSombrero]},
+  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42'], icons:[iconCactus, iconSombrero], mandala:true, tileSize:[100,140]},
   {label:'Halloween', gold:'#A85A21', goldLight:'#D69456', tagline:'Un toque misterioso para octubre', palette:['#E8792E','#6E4C9E','#2D2A3A','#F2C744'], icons:[iconPumpkin, iconBat]},
   {label:'Día de Muertos', gold:'#B5651D', goldLight:'#D99A52', tagline:'Honrando con color y memoria', palette:['#E8792E','#A662C9','#E85D8A','#F2C744'], icons:[iconSkull, iconMarigold]},
   {label:'Navidad', gold:'#A6342F', goldLight:'#CC6560', tagline:'Brilla esta Navidad', palette:['#C13B3B','#2E7D4F','#E3B23C','#E8792E'], icons:[iconTree, iconStar]},
@@ -414,13 +451,17 @@ function applySeasonalTheme(){
   document.documentElement.style.setProperty('--gold', theme.gold);
   document.documentElement.style.setProperty('--gold-light', theme.goldLight);
   if(tagEl) tagEl.textContent = theme.tagline;
+  const buildSvg = (mult) => theme.mandala
+    ? motifMandala(theme.palette[0], theme.palette[2], mult)
+    : motifIcons(theme.icons, theme.palette, mult);
+  const [tw, th] = theme.tileSize || [120, 120];
   if(bandEl){
-    const svg = motifIcons(theme.icons, theme.palette, 1);
-    bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(1))}")`;
+    bandEl.style.backgroundSize = `${Math.round(tw*0.6)}px ${Math.round(th*0.6)}px`;
   }
-  // Mismos íconos, visibles por toda la página como textura de fondo (más suave que la franja).
-  const watermark = motifIcons(theme.icons, theme.palette, 0.45);
-  document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(watermark)}")`;
+  // Mismo diseño, visible por toda la página como textura de fondo (más suave que la franja).
+  document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(0.45))}")`;
+  document.body.style.backgroundSize = `${tw}px ${th}px`;
 }
 
 
