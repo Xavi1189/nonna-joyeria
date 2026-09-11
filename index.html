@@ -496,6 +496,25 @@ function motifIconsGrid(icons, palette, mult){
   </g>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${content}</svg>`;
 }
+// Fondo tipo "brochazo de acuarela" (verde y rojo, como la bandera), diseño propio —
+// se usa solo para Mes Patrio en lugar de la cuadrícula de íconos.
+function motifSplash(palette, mult){
+  mult = mult==null ? 1 : mult;
+  const op = (v) => Math.min(1, v*mult);
+  const green = palette[0], red = palette[1];
+  const W = 260, H = 260;
+  const greenPath = `M -20 30 Q 15 5 55 20 Q 95 38 135 15 Q 170 -5 215 25
+    Q 195 65 155 55 Q 120 88 88 66 Q 55 105 18 86 Q -12 96 -20 62 Z`;
+  const redPath = `M 280 300 Q 245 270 215 285 Q 178 300 148 278
+    Q 115 305 85 285 Q 122 248 158 262 Q 195 232 225 250 Q 258 220 285 245 Z`;
+  const gSpots = [[30,88,4.4],[58,104,2.6],[190,10,3.4],[210,44,2.2],[12,54,2.8],[130,6,2]];
+  const rSpots = [[228,196,4.4],[202,172,2.6],[70,252,3.4],[96,218,2.2],[244,236,2.8],[130,254,2]];
+  const splatter = (spots, color) => spots.map(([x,y,r])=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${color}"/>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <g opacity="${op(.55)}"><path d="${greenPath}" fill="${green}"/>${splatter(gSpots, green)}</g>
+    <g opacity="${op(.55)}"><path d="${redPath}" fill="${red}"/>${splatter(rSpots, red)}</g>
+  </svg>`;
+}
 const MONTH_THEMES = [
   {label:'Fiestas', gold:'#B8860B', goldLight:'#D9A93F', tagline:'Empezamos el año brillando', palette:['#C9A227','#E85D3C','#2E7D4F','#E3B23C'], icons:[iconPartyHat, iconStar]},
   {label:'Amor', gold:'#B23A5C', goldLight:'#D98BA3', tagline:'Regala lo que enamora', palette:['#D9436A','#A662C9','#E88AA5','#F2C744'], icons:[iconHeart, iconFlower]},
@@ -505,7 +524,7 @@ const MONTH_THEMES = [
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
-  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42'], icons:[iconCactus, iconSombrero, iconStar, iconMoon, iconLadder, iconDrum]},
+  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42'], icons:[iconCactus, iconSombrero, iconStar, iconMoon, iconLadder, iconDrum], splash:true},
   {label:'Halloween', gold:'#A85A21', goldLight:'#D69456', tagline:'Un toque misterioso para octubre', palette:['#E8792E','#6E4C9E','#2D2A3A','#F2C744'], icons:[iconPumpkin, iconBat]},
   {label:'Día de Muertos', gold:'#B5651D', goldLight:'#D99A52', tagline:'Honrando con color y memoria', palette:['#E8792E','#A662C9','#E85D8A','#F2C744'], icons:[iconSkull, iconMarigold]},
   {label:'Navidad', gold:'#A6342F', goldLight:'#CC6560', tagline:'Brilla esta Navidad', palette:['#C13B3B','#2E7D4F','#E3B23C','#E8792E'], icons:[iconTree, iconStar]},
@@ -533,13 +552,19 @@ function applySeasonalTheme(){
   document.documentElement.style.setProperty('--gold-light', theme.goldLight);
   if(tagEl) tagEl.textContent = theme.tagline;
   const useGrid = theme.icons.length > 2;
-  const buildSvg = (mult) => useGrid ? motifIconsGrid(theme.icons, theme.palette, mult) : motifIcons(theme.icons, theme.palette, mult);
-  const tileW = useGrid ? 240 : 120, tileH = useGrid ? 160 : 120;
+  let buildSvg, tileW, tileH;
+  if(theme.splash){
+    buildSvg = (mult) => motifSplash(theme.palette, mult);
+    tileW = 260; tileH = 260;
+  } else {
+    buildSvg = (mult) => useGrid ? motifIconsGrid(theme.icons, theme.palette, mult) : motifIcons(theme.icons, theme.palette, mult);
+    tileW = useGrid ? 240 : 120; tileH = useGrid ? 160 : 120;
+  }
   if(bandEl){
     bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(1))}")`;
     bandEl.style.backgroundSize = `${Math.round(tileW*0.4)}px ${Math.round(tileH*0.4)}px`;
   }
-  // Mismos íconos, visibles por toda la página como textura de fondo (más suave que la franja).
+  // Mismo diseño, visible por toda la página como textura de fondo (más suave que la franja).
   document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(0.45))}")`;
   document.body.style.backgroundSize = `${tileW}px ${tileH}px`;
 }
