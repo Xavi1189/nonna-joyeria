@@ -3705,15 +3705,28 @@ async function deleteCustomerAccount(phone){
   const abonoReqIds = state.abonoRequests.filter(r=>r.customerPhone===phone).map(r=>r.id);
 
   sales.forEach(s => restoreStockFromSale(s));
-  const okProducts = await saveProducts();
-  const okSales = await deleteRows('sales', 'id', saleIds);
-  const okPayments = await deleteRows('payments', 'id', paymentIds);
-  const okRequests = await deleteRows('requests', 'id', requestIds);
-  const okAbono = await deleteRows('payment_requests', 'id', abonoReqIds);
-  const okCustomer = await deleteRows('customers', 'phone', [phone]);
-
-  if(!okProducts || !okSales || !okPayments || !okRequests || !okAbono || !okCustomer){
-    notify('No se pudo eliminar por completo a la clienta. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Es posible que haya quedado información parcial — revisa e intenta de nuevo.');
+  if(!await saveProducts()){
+    notify('No se pudo actualizar el inventario. Detalle técnico: ' + (lastSaveError||'desconocido') + '. No se eliminó nada todavía — intenta de nuevo.');
+    return;
+  }
+  if(!await deleteRows('sales', 'id', saleIds)){
+    notify('No se pudieron eliminar sus compras. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Se detuvo antes de tocar el resto de su información.');
+    return;
+  }
+  if(!await deleteRows('payments', 'id', paymentIds)){
+    notify('No se pudieron eliminar sus abonos. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Se detuvo antes de tocar el resto de su información.');
+    return;
+  }
+  if(!await deleteRows('requests', 'id', requestIds)){
+    notify('No se pudieron eliminar sus solicitudes. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Se detuvo antes de eliminar a la clienta.');
+    return;
+  }
+  if(!await deleteRows('payment_requests', 'id', abonoReqIds)){
+    notify('No se pudieron eliminar sus pagos por confirmar. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Se detuvo antes de eliminar a la clienta.');
+    return;
+  }
+  if(!await deleteRows('customers', 'phone', [phone])){
+    notify('No se pudo eliminar a la clienta. Detalle técnico: ' + (lastSaveError||'desconocido') + '. El resto de su información ya se borró correctamente.');
     return;
   }
 
