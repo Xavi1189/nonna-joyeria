@@ -170,6 +170,8 @@
   .lote-item-box{border:1px solid var(--line);border-radius:var(--radius);padding:18px 18px 8px;margin-bottom:14px;background:var(--cream-2);}
   .img-preview{width:84px;height:84px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
   .img-preview img{width:100%;height:100%;object-fit:cover;}
+  .img-preview-zoomable{cursor:zoom-in;transition:transform .15s ease;}
+  .img-preview-zoomable:hover{transform:scale(1.6);}
 
   /* ---------- Modal ---------- */
   .modal-overlay{position:fixed;inset:0;background:rgba(24,20,15,.45);display:flex;align-items:center;justify-content:center;z-index:80;padding:20px;backdrop-filter:blur(2px);}
@@ -1355,7 +1357,9 @@ function adminInventario(){
       : money(p.price);
     return `
     <tr>
-      <td><div class="img-preview" style="width:48px;height:48px;">${p.image ? `<img src="${esc(p.image)}" alt="">` : `<span class="muted" style="font-size:9px;">Sin foto</span>`}</div></td>
+      <td>${p.image
+        ? `<div class="img-preview img-preview-zoomable" style="width:48px;height:48px;" data-preview-image="${esc(p.image)}" data-preview-name="${esc(p.name)}"><img src="${esc(p.image)}" alt=""></div>`
+        : `<div class="img-preview" style="width:48px;height:48px;"><span class="muted" style="font-size:9px;">Sin foto</span></div>`}</td>
       <td>${esc(p.name)}<div class="muted">${esc(p.sku)}</div></td>
       <td>${esc(p.category)}</td>
       <td>${priceCell}</td>
@@ -2329,6 +2333,15 @@ function renderModal(){
           <p class="muted" style="margin-top:10px;">Se descuenta del catálogo (de las recepciones más antiguas primero) y se registra como una compra ya liquidada, a nombre de "Venta en tienda (mostrador)" — así sí cuenta en tus reportes de ganancia por recepción.</p>
         </div>
       </div>`;
+  } else if(state.modal.type === 'imagePreview'){
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" style="max-width:340px;text-align:center;">
+          <button class="modal-close" id="modalClose">&times;</button>
+          <img src="${esc(state.modal.image)}" alt="${esc(state.modal.name||'')}" style="width:100%;border-radius:var(--radius);border:1px solid var(--line);">
+          ${state.modal.name ? `<p class="muted" style="margin-top:12px;">${esc(state.modal.name)}</p>` : ''}
+        </div>
+      </div>`;
   }
 }
 
@@ -2632,6 +2645,10 @@ function bindEvents(){
   const backToInventario = document.getElementById('backToInventario');
   if(backToInventario) backToInventario.onclick = () => { state.viewingProductTraceId = null; render(); };
 
+  document.querySelectorAll('[data-preview-image]').forEach(el => el.onclick = () => {
+    state.modal = {type:'imagePreview', image: el.dataset.previewImage, name: el.dataset.previewName};
+    render();
+  });
   document.querySelectorAll('[data-mark-sold]').forEach(b => b.onclick = () => {
     state.modal = {type:'markSold', productId: b.dataset.markSold, qty:null, method:'efectivo', error:''};
     render();
