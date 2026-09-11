@@ -1355,6 +1355,7 @@ function adminInventario(){
       : money(p.price);
     return `
     <tr>
+      <td><div class="img-preview" style="width:48px;height:48px;">${p.image ? `<img src="${esc(p.image)}" alt="">` : `<span class="muted" style="font-size:9px;">Sin foto</span>`}</div></td>
       <td>${esc(p.name)}<div class="muted">${esc(p.sku)}</div></td>
       <td>${esc(p.category)}</td>
       <td>${priceCell}</td>
@@ -1376,7 +1377,7 @@ function adminInventario(){
     ${state.products.length ? `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Artículo</th><th>Categoría</th><th>Precio</th><th>Existencia</th><th></th></tr></thead>
+        <thead><tr><th>Foto</th><th>Artículo</th><th>Categoría</th><th>Precio</th><th>Existencia</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>` : `<div class="empty"><div class="display">Sin artículos</div><p>Los artículos se dan de alta desde una recepción de mercancía, en la pestaña <b>Recepciones</b>.</p></div>`}
