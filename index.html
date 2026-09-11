@@ -264,74 +264,133 @@ function clearClientSession(){
 const APP_URL = 'https://nonna-joyeria.vercel.app';
 
 // Temas de temporada: cambian el color de acento, el mensaje bajo el logo y un patrón
-// decorativo (flores tipo folk-art mexicano, diseño propio) según el mes. Se puede
-// apagar o forzar un mes distinto desde Admin → Solicitudes.
+// de íconos dibujados a mano (diseño propio, no imágenes de terceros) según el mes.
+// Se puede apagar o forzar un mes distinto desde Admin → Solicitudes.
 function svgTile(inner){
   return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">${inner}</svg>`;
 }
-// Un ramillete de 2 flores + hojas + puntos, con 4 colores (palette). Se usa igual en la
-// franja del encabezado (más intensa) que en el fondo de toda la página (más tenue).
-function motifFolkArt(palette, mult){
+// Cada ícono se dibuja en su propia caja de 60x60 centrada en (30,30), con trazo grueso
+// y redondeado (estilo marcador/dibujado a mano). Los colores se les pasan al armar el mosaico.
+function iconCactus(c){
+  return `<g stroke="${c}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M30 52 V14"/>
+    <path d="M30 40 Q30 27 19 27 Q19 35 19 40"/>
+    <path d="M30 33 Q30 22 41 22 Q41 29 41 33"/>
+  </g>`;
+}
+function iconSombrero(c){
+  return `<g stroke="${c}" stroke-width="3.4" stroke-linecap="round" fill="none">
+    <ellipse cx="30" cy="42" rx="21" ry="5.5"/>
+    <path d="M17 41 Q17 25 30 23 Q43 25 43 41"/>
+  </g>`;
+}
+function iconPartyHat(c){
+  return `<path d="M22 50 L30 15 L38 50 Z" stroke="${c}" stroke-width="3.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/><circle cx="30" cy="12" r="3.6" fill="${c}"/>`;
+}
+function iconHeart(c){
+  return `<path d="M30 47 C15 35 11 23 20 17 C26 13 30 19 30 22 C30 19 34 13 40 17 C49 23 45 35 30 47 Z" fill="${c}"/>`;
+}
+function iconFlower(c){
+  return `<g stroke="${c}" stroke-width="3" fill="none" stroke-linecap="round">
+    <circle cx="30" cy="30" r="5.4"/>
+    <path d="M30 9 Q36 20 30 26 Q24 20 30 9"/>
+    <path d="M30 51 Q36 40 30 34 Q24 40 30 51"/>
+    <path d="M9 30 Q20 24 26 30 Q20 36 9 30"/>
+    <path d="M51 30 Q40 24 34 30 Q40 36 51 30"/>
+  </g>`;
+}
+function iconButterfly(c){
+  return `<g fill="${c}">
+    <path d="M30 30 Q15 11 7 22 Q13 34 30 30 Z"/>
+    <path d="M30 30 Q45 11 53 22 Q47 34 30 30 Z"/>
+    <path d="M30 30 Q19 43 11 39 Q15 48 30 37 Z"/>
+    <path d="M30 30 Q41 43 49 39 Q45 48 30 37 Z"/>
+  </g><line x1="30" y1="17" x2="30" y2="43" stroke="${c}" stroke-width="2.4" stroke-linecap="round"/>`;
+}
+function iconSun(c){
+  return `<circle cx="30" cy="30" r="9.4" fill="${c}"/>
+    <g stroke="${c}" stroke-width="3.4" stroke-linecap="round">
+      <path d="M30 5v7M30 48v7M5 30h7M48 30h7M13 13l5 5M42 42l5 5M47 13l-5 5M13 42l5 5"/>
+    </g>`;
+}
+function iconWave(c){
+  return `<path d="M5 34 Q14 23 23 34 Q30 45 39 34 Q47 23 55 34" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+}
+function iconPumpkin(c){
+  return `<ellipse cx="30" cy="35" rx="17.5" ry="13.5" fill="${c}"/>
+    <path d="M30 22 Q27 13 33 8" stroke="${c}" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+    <g fill="var(--cream)">
+      <path d="M21 31 L26 35 L21 39 Z"/>
+      <path d="M39 31 L34 35 L39 39 Z"/>
+      <path d="M23 43 Q30 48 37 43 L33 41 L30 43 L27 41 Z"/>
+    </g>`;
+}
+function iconBat(c){
+  return `<g fill="${c}">
+    <ellipse cx="30" cy="32" rx="3.2" ry="4.8"/>
+    <path d="M30 27 Q15 12 5 22 Q14 30 27 29 Z"/>
+    <path d="M30 27 Q45 12 55 22 Q46 30 33 29 Z"/>
+  </g>`;
+}
+function iconSkull(c){
+  return `<g fill="${c}">
+    <circle cx="30" cy="27" r="14.4"/>
+    <path d="M17 37 Q30 51 43 37 Q37 45 30 45 Q23 45 17 37 Z"/>
+  </g>
+  <g fill="var(--cream)">
+    <ellipse cx="23" cy="25" rx="4.2" ry="5.6"/>
+    <ellipse cx="37" cy="25" rx="4.2" ry="5.6"/>
+    <path d="M27 35 L30 40 L33 35 Z"/>
+  </g>`;
+}
+function iconMarigold(c){
+  return `<g fill="${c}">
+    <circle cx="30" cy="30" r="5.6"/>
+    <ellipse cx="30" cy="14" rx="4.4" ry="7.8"/>
+    <ellipse cx="30" cy="46" rx="4.4" ry="7.8"/>
+    <ellipse cx="14" cy="30" rx="7.8" ry="4.4"/>
+    <ellipse cx="46" cy="30" rx="7.8" ry="4.4"/>
+    <ellipse cx="18" cy="18" rx="5.4" ry="5.4" transform="rotate(45 18 18)"/>
+    <ellipse cx="42" cy="18" rx="5.4" ry="5.4" transform="rotate(-45 42 18)"/>
+    <ellipse cx="18" cy="42" rx="5.4" ry="5.4" transform="rotate(-45 18 42)"/>
+    <ellipse cx="42" cy="42" rx="5.4" ry="5.4" transform="rotate(45 42 42)"/>
+  </g>`;
+}
+function iconTree(c){
+  return `<path d="M30 5 L41 22 L34 22 L45 37 L36 37 L49 52 L11 52 L24 37 L15 37 L26 22 L19 22 Z" fill="${c}"/><rect x="27" y="52" width="6" height="6" fill="${c}"/>`;
+}
+function iconStar(c){
+  return `<path d="M30 7 l3.1 9.6 10 .1-8 6.2 3 9.6-8.1-6-8.1 6 3-9.6-8-6.2 10-.1z" fill="${c}"/>`;
+}
+// Compone 2 íconos (con sus propios colores de la paleta del mes) más unos puntos de confeti.
+function motifIcons(icons, palette, mult){
   mult = mult==null ? 1 : mult;
   const op = (v) => Math.min(1, v*mult);
-  const [c1, c2, c3, c4] = palette;
+  const [c1, c2, , c4] = palette;
   return svgTile(`
-    <g fill="${c3}" opacity="${op(.85)}">
-      <path d="M10 66 Q22 54 34 66 Q22 78 10 66 Z"/>
-      <path d="M86 18 Q98 6 110 18 Q98 30 86 18 Z"/>
-    </g>
-    <g opacity="${op(.95)}">
-      <circle cx="60" cy="54" r="7" fill="${c4}"/>
-      <g fill="${c1}">
-        <ellipse cx="60" cy="35" rx="7" ry="12"/>
-        <ellipse cx="60" cy="73" rx="7" ry="12"/>
-        <ellipse cx="41" cy="54" rx="12" ry="7"/>
-        <ellipse cx="79" cy="54" rx="12" ry="7"/>
-        <ellipse cx="46" cy="40" rx="8" ry="8" transform="rotate(45 46 40)"/>
-        <ellipse cx="74" cy="40" rx="8" ry="8" transform="rotate(-45 74 40)"/>
-        <ellipse cx="46" cy="68" rx="8" ry="8" transform="rotate(-45 46 68)"/>
-        <ellipse cx="74" cy="68" rx="8" ry="8" transform="rotate(45 74 68)"/>
-      </g>
-    </g>
-    <g opacity="${op(.95)}">
-      <circle cx="22" cy="22" r="4" fill="${c4}"/>
-      <g fill="${c2}">
-        <ellipse cx="22" cy="13" rx="3.4" ry="5.4"/>
-        <ellipse cx="22" cy="31" rx="3.4" ry="5.4"/>
-        <ellipse cx="13" cy="22" rx="5.4" ry="3.4"/>
-        <ellipse cx="31" cy="22" rx="5.4" ry="3.4"/>
-      </g>
-    </g>
-    <g opacity="${op(.95)}">
-      <circle cx="100" cy="98" r="4" fill="${c1}"/>
-      <g fill="${c2}">
-        <ellipse cx="100" cy="89" rx="3.4" ry="5.4"/>
-        <ellipse cx="100" cy="107" rx="3.4" ry="5.4"/>
-        <ellipse cx="91" cy="98" rx="5.4" ry="3.4"/>
-        <ellipse cx="109" cy="98" rx="5.4" ry="3.4"/>
-      </g>
-    </g>
-    <g fill="${c4}" opacity="${op(.9)}">
-      <circle cx="95" cy="30" r="2.6"/>
-      <circle cx="20" cy="95" r="2.6"/>
-      <circle cx="60" cy="105" r="2"/>
-      <circle cx="8" cy="40" r="2"/>
-      <circle cx="105" cy="65" r="2"/>
+    <g opacity="${op(.95)}" transform="translate(4,4) scale(0.92)">${icons[0](c1)}</g>
+    <g opacity="${op(.9)}" transform="translate(62,60) scale(0.72)">${icons[1](c2)}</g>
+    <g fill="${c4}" opacity="${op(.85)}">
+      <circle cx="100" cy="22" r="2.8"/>
+      <circle cx="16" cy="100" r="2.8"/>
+      <circle cx="58" cy="110" r="2.1"/>
+      <circle cx="10" cy="55" r="2.1"/>
+      <circle cx="112" cy="72" r="2.1"/>
     </g>`);
 }
 const MONTH_THEMES = [
-  {label:'Fiestas', gold:'#B8860B', goldLight:'#D9A93F', tagline:'Empezamos el año brillando', palette:['#C9A227','#E85D3C','#2E7D4F','#E3B23C']},
-  {label:'Amor', gold:'#B23A5C', goldLight:'#D98BA3', tagline:'Regala lo que enamora', palette:['#D9436A','#A662C9','#E88AA5','#F2C744']},
-  {label:'Primavera', gold:'#6E8F4A', goldLight:'#9FC17C', tagline:'Piezas frescas para la temporada', palette:['#E85D8A','#F2C744','#4C9A5B','#7FB8D6']},
-  {label:'Primavera', gold:'#6E8F4A', goldLight:'#9FC17C', tagline:'Piezas frescas para la temporada', palette:['#E85D8A','#F2C744','#4C9A5B','#7FB8D6']},
-  {label:'Día de las Madres', gold:'#C6708F', goldLight:'#E3A9BE', tagline:'Para la mamá que lo merece todo', palette:['#E06B93','#A662C9','#4C9A5B','#F2C744']},
-  {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4']},
-  {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4']},
-  {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4']},
-  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42']},
-  {label:'Halloween', gold:'#A85A21', goldLight:'#D69456', tagline:'Un toque misterioso para octubre', palette:['#E8792E','#6E4C9E','#2D2A3A','#F2C744']},
-  {label:'Día de Muertos', gold:'#B5651D', goldLight:'#D99A52', tagline:'Honrando con color y memoria', palette:['#E8792E','#A662C9','#E85D8A','#F2C744']},
-  {label:'Navidad', gold:'#A6342F', goldLight:'#CC6560', tagline:'Brilla esta Navidad', palette:['#C13B3B','#2E7D4F','#E3B23C','#E8792E']},
+  {label:'Fiestas', gold:'#B8860B', goldLight:'#D9A93F', tagline:'Empezamos el año brillando', palette:['#C9A227','#E85D3C','#2E7D4F','#E3B23C'], icons:[iconPartyHat, iconStar]},
+  {label:'Amor', gold:'#B23A5C', goldLight:'#D98BA3', tagline:'Regala lo que enamora', palette:['#D9436A','#A662C9','#E88AA5','#F2C744'], icons:[iconHeart, iconFlower]},
+  {label:'Primavera', gold:'#6E8F4A', goldLight:'#9FC17C', tagline:'Piezas frescas para la temporada', palette:['#E85D8A','#F2C744','#4C9A5B','#7FB8D6'], icons:[iconFlower, iconButterfly]},
+  {label:'Primavera', gold:'#6E8F4A', goldLight:'#9FC17C', tagline:'Piezas frescas para la temporada', palette:['#E85D8A','#F2C744','#4C9A5B','#7FB8D6'], icons:[iconFlower, iconButterfly]},
+  {label:'Día de las Madres', gold:'#C6708F', goldLight:'#E3A9BE', tagline:'Para la mamá que lo merece todo', palette:['#E06B93','#A662C9','#4C9A5B','#F2C744'], icons:[iconFlower, iconHeart]},
+  {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
+  {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
+  {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
+  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42'], icons:[iconCactus, iconSombrero]},
+  {label:'Halloween', gold:'#A85A21', goldLight:'#D69456', tagline:'Un toque misterioso para octubre', palette:['#E8792E','#6E4C9E','#2D2A3A','#F2C744'], icons:[iconPumpkin, iconBat]},
+  {label:'Día de Muertos', gold:'#B5651D', goldLight:'#D99A52', tagline:'Honrando con color y memoria', palette:['#E8792E','#A662C9','#E85D8A','#F2C744'], icons:[iconSkull, iconMarigold]},
+  {label:'Navidad', gold:'#A6342F', goldLight:'#CC6560', tagline:'Brilla esta Navidad', palette:['#C13B3B','#2E7D4F','#E3B23C','#E8792E'], icons:[iconTree, iconStar]},
 ];
 function getActiveThemeIndex(){
   const override = state.settings && state.settings.themeOverride;
@@ -356,11 +415,11 @@ function applySeasonalTheme(){
   document.documentElement.style.setProperty('--gold-light', theme.goldLight);
   if(tagEl) tagEl.textContent = theme.tagline;
   if(bandEl){
-    const svg = motifFolkArt(theme.palette, 1);
+    const svg = motifIcons(theme.icons, theme.palette, 1);
     bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
   }
-  // Mismo diseño, visible por toda la página como textura de fondo (más suave que la franja).
-  const watermark = motifFolkArt(theme.palette, 0.45);
+  // Mismos íconos, visibles por toda la página como textura de fondo (más suave que la franja).
+  const watermark = motifIcons(theme.icons, theme.palette, 0.45);
   document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(watermark)}")`;
 }
 
