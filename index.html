@@ -362,6 +362,27 @@ function iconTree(c){
 function iconStar(c){
   return `<path d="M30 7 l3.1 9.6 10 .1-8 6.2 3 9.6-8.1-6-8.1 6 3-9.6-8-6.2 10-.1z" fill="${c}"/>`;
 }
+function iconMoon(c){
+  return `<path d="M36 12 A18 18 0 1 0 36 48 A13 13 0 1 1 36 12 Z" fill="${c}"/>`;
+}
+function iconLadder(c){
+  return `<g stroke="${c}" stroke-width="3.4" stroke-linecap="round">
+    <line x1="21" y1="9" x2="21" y2="51"/>
+    <line x1="39" y1="9" x2="39" y2="51"/>
+    <line x1="21" y1="17" x2="39" y2="17"/>
+    <line x1="21" y1="27" x2="39" y2="27"/>
+    <line x1="21" y1="37" x2="39" y2="37"/>
+    <line x1="21" y1="47" x2="39" y2="47"/>
+  </g>`;
+}
+function iconDrum(c){
+  return `<rect x="15" y="21" width="30" height="21" rx="2" fill="${c}"/>
+    <ellipse cx="30" cy="21" rx="15" ry="5.4" fill="${c}"/>
+    <g stroke="var(--cream)" stroke-width="2.2">
+      <line x1="16" y1="25" x2="44" y2="38"/>
+      <line x1="16" y1="38" x2="44" y2="25"/>
+    </g>`;
+}
 // Compone 2 íconos (con sus propios colores de la paleta del mes) más unos puntos de confeti.
 function motifIcons(icons, palette, mult){
   mult = mult==null ? 1 : mult;
@@ -378,6 +399,29 @@ function motifIcons(icons, palette, mult){
       <circle cx="112" cy="72" r="2.1"/>
     </g>`);
 }
+// Para meses con más de 2 íconos: los acomoda en cuadrícula (3x2) dentro de un mosaico más
+// grande, alternando colores de la paleta, para que se note más variedad al repetirse.
+function motifIconsGrid(icons, palette, mult){
+  mult = mult==null ? 1 : mult;
+  const op = (v) => Math.min(1, v*mult);
+  const cols = 3, rows = 2, cellW = 80, cellH = 80;
+  const W = cellW*cols, H = cellH*rows;
+  let content = '';
+  icons.forEach((iconFn, i) => {
+    const col = i % cols, row = Math.floor(i/cols) % rows;
+    const cx = col*cellW + (cellW-60)/2;
+    const cy = row*cellH + (cellH-60)/2;
+    const color = palette[i % 2];
+    content += `<g opacity="${op(.92)}" transform="translate(${cx},${cy}) scale(0.85)">${iconFn(color)}</g>`;
+  });
+  content += `<g fill="${palette[3]}" opacity="${op(.85)}">
+    <circle cx="${W-14}" cy="14" r="2.8"/>
+    <circle cx="14" cy="${H-14}" r="2.8"/>
+    <circle cx="${W/2}" cy="10" r="2.1"/>
+    <circle cx="${W/2}" cy="${H-10}" r="2.1"/>
+  </g>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${content}</svg>`;
+}
 const MONTH_THEMES = [
   {label:'Fiestas', gold:'#B8860B', goldLight:'#D9A93F', tagline:'Empezamos el año brillando', palette:['#C9A227','#E85D3C','#2E7D4F','#E3B23C'], icons:[iconPartyHat, iconStar]},
   {label:'Amor', gold:'#B23A5C', goldLight:'#D98BA3', tagline:'Regala lo que enamora', palette:['#D9436A','#A662C9','#E88AA5','#F2C744'], icons:[iconHeart, iconFlower]},
@@ -387,7 +431,7 @@ const MONTH_THEMES = [
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
   {label:'Verano', gold:'#1E8E8A', goldLight:'#5FBDB9', tagline:'Brillo para los días largos', palette:['#2AA8A3','#F2A93C','#E86B4F','#4FB6C4'], icons:[iconSun, iconWave]},
-  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42'], icons:[iconCactus, iconSombrero]},
+  {label:'Mes Patrio', gold:'#256D42', goldLight:'#5A9C71', tagline:'¡Viva México!', palette:['#2E7D4F','#E23D3D','#F2C744','#256D42'], icons:[iconCactus, iconSombrero, iconStar, iconMoon, iconLadder, iconDrum]},
   {label:'Halloween', gold:'#A85A21', goldLight:'#D69456', tagline:'Un toque misterioso para octubre', palette:['#E8792E','#6E4C9E','#2D2A3A','#F2C744'], icons:[iconPumpkin, iconBat]},
   {label:'Día de Muertos', gold:'#B5651D', goldLight:'#D99A52', tagline:'Honrando con color y memoria', palette:['#E8792E','#A662C9','#E85D8A','#F2C744'], icons:[iconSkull, iconMarigold]},
   {label:'Navidad', gold:'#A6342F', goldLight:'#CC6560', tagline:'Brilla esta Navidad', palette:['#C13B3B','#2E7D4F','#E3B23C','#E8792E'], icons:[iconTree, iconStar]},
@@ -414,13 +458,16 @@ function applySeasonalTheme(){
   document.documentElement.style.setProperty('--gold', theme.gold);
   document.documentElement.style.setProperty('--gold-light', theme.goldLight);
   if(tagEl) tagEl.textContent = theme.tagline;
+  const useGrid = theme.icons.length > 2;
+  const buildSvg = (mult) => useGrid ? motifIconsGrid(theme.icons, theme.palette, mult) : motifIcons(theme.icons, theme.palette, mult);
+  const tileW = useGrid ? 240 : 120, tileH = useGrid ? 160 : 120;
   if(bandEl){
-    const svg = motifIcons(theme.icons, theme.palette, 1);
-    bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(1))}")`;
+    bandEl.style.backgroundSize = `${Math.round(tileW*0.4)}px ${Math.round(tileH*0.4)}px`;
   }
   // Mismos íconos, visibles por toda la página como textura de fondo (más suave que la franja).
-  const watermark = motifIcons(theme.icons, theme.palette, 0.45);
-  document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(watermark)}")`;
+  document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(0.45))}")`;
+  document.body.style.backgroundSize = `${tileW}px ${tileH}px`;
 }
 
 
