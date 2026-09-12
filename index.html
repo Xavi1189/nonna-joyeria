@@ -497,22 +497,39 @@ function motifIconsGrid(icons, palette, mult){
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${content}</svg>`;
 }
 // Fondo tipo "brochazo de acuarela" (verde y rojo, como la bandera), diseño propio —
-// se usa solo para Mes Patrio en lugar de la cuadrícula de íconos.
-function motifSplash(palette, mult){
-  mult = mult==null ? 1 : mult;
-  const op = (v) => Math.min(1, v*mult);
-  const green = palette[0], red = palette[1];
-  const W = 260, H = 260;
-  const greenPath = `M -20 30 Q 15 5 55 20 Q 95 38 135 15 Q 170 -5 215 25
-    Q 195 65 155 55 Q 120 88 88 66 Q 55 105 18 86 Q -12 96 -20 62 Z`;
-  const redPath = `M 280 300 Q 245 270 215 285 Q 178 300 148 278
-    Q 115 305 85 285 Q 122 248 158 262 Q 195 232 225 250 Q 258 220 285 245 Z`;
-  const gSpots = [[30,88,4.4],[58,104,2.6],[190,10,3.4],[210,44,2.2],[12,54,2.8],[130,6,2]];
-  const rSpots = [[228,196,4.4],[202,172,2.6],[70,252,3.4],[96,218,2.2],[244,236,2.8],[130,254,2]];
-  const splatter = (spots, color) => spots.map(([x,y,r])=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${color}"/>`).join('');
+// se usa solo para Mes Patrio, como manchas grandes con bordes orgánicos (no un ícono
+// repetido): se logra desplazando el borde con ruido (filtro SVG), como si se hubiera corrido.
+function motifWashLayer(color, seed, W, H){
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-    <g opacity="${op(.55)}"><path d="${greenPath}" fill="${green}"/>${splatter(gSpots, green)}</g>
-    <g opacity="${op(.55)}"><path d="${redPath}" fill="${red}"/>${splatter(rSpots, red)}</g>
+    <defs>
+      <filter id="rough${seed}" x="-40%" y="-40%" width="180%" height="180%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012 0.022" numOctaves="3" seed="${seed}" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="${Math.round(W*0.13)}" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+      <filter id="grain${seed}">
+        <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" seed="${seed+3}" result="n"/>
+        <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .1 0"/>
+      </filter>
+    </defs>
+    <g filter="url(#rough${seed})">
+      <ellipse cx="${W*0.42}" cy="${H*0.4}" rx="${W*0.4}" ry="${H*0.32}" fill="${color}"/>
+      <ellipse cx="${W*0.2}" cy="${H*0.68}" rx="${W*0.24}" ry="${H*0.2}" fill="${color}"/>
+    </g>
+    <rect width="${W}" height="${H}" filter="url(#grain${seed})"/>
+  </svg>`;
+}
+function motifWashBand(green, red, W, H){
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs>
+      <filter id="roughband" x="-30%" y="-40%" width="160%" height="180%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.02 0.035" numOctaves="3" seed="11" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="16" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+    <g filter="url(#roughband)">
+      <ellipse cx="${W*0.24}" cy="${H*0.5}" rx="${W*0.28}" ry="${H*0.42}" fill="${green}"/>
+      <ellipse cx="${W*0.76}" cy="${H*0.5}" rx="${W*0.28}" ry="${H*0.42}" fill="${red}"/>
+    </g>
   </svg>`;
 }
 const MONTH_THEMES = [
@@ -551,21 +568,39 @@ function applySeasonalTheme(){
   document.documentElement.style.setProperty('--gold', theme.gold);
   document.documentElement.style.setProperty('--gold-light', theme.goldLight);
   if(tagEl) tagEl.textContent = theme.tagline;
-  const useGrid = theme.icons.length > 2;
-  let buildSvg, tileW, tileH;
+
   if(theme.splash){
-    buildSvg = (mult) => motifSplash(theme.palette, mult);
-    tileW = 260; tileH = 260;
-  } else {
-    buildSvg = (mult) => useGrid ? motifIconsGrid(theme.icons, theme.palette, mult) : motifIcons(theme.icons, theme.palette, mult);
-    tileW = useGrid ? 240 : 120; tileH = useGrid ? 160 : 120;
+    // Manchas grandes fijas, sin repetir en mosaico — no ligadas a un tamaño de "ícono".
+    const green = theme.palette[0], red = theme.palette[1];
+    if(bandEl){
+      const bandSvg = motifWashBand(green, red, 400, 70);
+      bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(bandSvg)}")`;
+      bandEl.style.backgroundRepeat = 'no-repeat';
+      bandEl.style.backgroundSize = '100% 100%';
+      bandEl.style.backgroundPosition = 'center';
+    }
+    const greenLayer = motifWashLayer(green, 5, 460, 360);
+    const redLayer = motifWashLayer(red, 17, 460, 360);
+    document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(greenLayer)}"), url("data:image/svg+xml,${encodeURIComponent(redLayer)}")`;
+    document.body.style.backgroundRepeat = 'no-repeat, no-repeat';
+    document.body.style.backgroundPosition = 'top left, bottom right';
+    document.body.style.backgroundSize = '460px 360px, 460px 360px';
+    return;
   }
+
+  // Meses normales: mosaico de íconos repetido por toda la página.
+  const useGrid = theme.icons.length > 2;
+  const buildSvg = (mult) => useGrid ? motifIconsGrid(theme.icons, theme.palette, mult) : motifIcons(theme.icons, theme.palette, mult);
+  const tileW = useGrid ? 240 : 120, tileH = useGrid ? 160 : 120;
   if(bandEl){
     bandEl.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(1))}")`;
+    bandEl.style.backgroundRepeat = 'repeat-x';
+    bandEl.style.backgroundPosition = 'center';
     bandEl.style.backgroundSize = `${Math.round(tileW*0.4)}px ${Math.round(tileH*0.4)}px`;
   }
-  // Mismo diseño, visible por toda la página como textura de fondo (más suave que la franja).
   document.body.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(buildSvg(0.45))}")`;
+  document.body.style.backgroundRepeat = 'repeat';
+  document.body.style.backgroundPosition = '0 0';
   document.body.style.backgroundSize = `${tileW}px ${tileH}px`;
 }
 
