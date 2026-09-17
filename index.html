@@ -2277,6 +2277,10 @@ function customerAccountDetail(c){
       ${pendingAbonoReqs.map(paymentReqCardHtml).join('')}
       ` : ''}
 
+      <h4 style="margin-top:22px;">Agregar una compra nueva</h4>
+      <p class="muted">Úsalo cuando la clienta ya tiene cuenta abierta contigo y adquiere un artículo más — se descuenta del inventario y se suma a su saldo pendiente.</p>
+      <button class="btn btn-ghost" id="btnAddPurchase" data-add-purchase="${esc(c.phone)}" data-add-purchase-name="${esc(c.name)}">Agregar compra</button>
+
       ${saldo>0 ? `
       <h4 style="margin-top:22px;">Registrar abono a la cuenta</h4>
       <div class="field-row">
@@ -2714,6 +2718,54 @@ function renderModal(){
           <p class="muted" style="margin-top:10px;">Se descuenta del catálogo (de las recepciones más antiguas primero) y se registra como una compra ya liquidada, a nombre de "Venta en tienda (mostrador)" — así sí cuenta en tus reportes de ganancia por recepción.</p>
         </div>
       </div>`;
+  } else if(state.modal.type === 'addPurchase'){
+    const items = state.modal.items || [];
+    const sortedProducts = [...state.products].sort((a,b)=> a.name.localeCompare(b.name));
+    const rowsHtml = items.map(row => {
+      const p = row.productId ? state.products.find(pp=>pp.id===row.productId) : null;
+      const stock = p ? productStock(p) : 0;
+      const options = sortedProducts.map(pp => {
+        const st = productStock(pp);
+        return `<option value="${esc(pp.id)}" ${row.productId===pp.id?'selected':''} ${st<=0 && row.productId!==pp.id?'disabled':''}>${esc(pp.name)} — ${esc(pp.category)} — ${money(effectivePrice(pp))} (existencia: ${st})</option>`;
+      }).join('');
+      return `
+      <div class="field-row" style="align-items:flex-end;" data-ap-row="${row.id}">
+        <div class="field" style="flex:2;min-width:200px;"><label>Artículo</label>
+          <select data-ap-product="${row.id}">
+            <option value="">Selecciona un artículo</option>
+            ${options}
+          </select>
+        </div>
+        <div class="field" style="flex:1;"><label>Cantidad</label>
+          <input type="number" min="1" step="1" max="${stock||1}" data-ap-qty="${row.id}" value="${esc(row.qty!=null?row.qty:'')}">
+        </div>
+        <div class="field" style="flex:0 0 auto;">
+          <button type="button" class="link-btn" data-ap-remove="${row.id}">Quitar</button>
+        </div>
+      </div>`;
+    }).join('');
+    const total = items.reduce((s,row) => {
+      const p = row.productId ? state.products.find(pp=>pp.id===row.productId) : null;
+      return s + (p ? effectivePrice(p) * Number(row.qty||0) : 0);
+    }, 0);
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+          <button class="modal-close" id="modalClose">&times;</button>
+          <div class="eyebrow">Agregar compra</div>
+          <h3 class="display" style="margin:6px 0 4px;">${esc(state.modal.name||'')}</h3>
+          <p class="muted" style="margin:0 0 18px;">Elige el o los artículos que adquirió. Se descuentan del inventario y se suman a su cuenta.</p>
+          ${rowsHtml}
+          <button type="button" class="link-btn" id="ap_add_row">+ Agregar otro artículo</button>
+          <p style="margin:14px 0 0;font-weight:600;">Total: ${money(total)}</p>
+          <div class="field" style="margin-top:14px;"><label>¿Pagó algo al momento? (opcional)</label>
+            <input type="number" id="ap_pago" min="0" max="${total}" step="0.01" placeholder="0.00" value="${esc(state.modal.pago!=null?state.modal.pago:'')}">
+          </div>
+          <p class="muted" style="margin:-4px 0 0;">Déjalo vacío o en 0 si no pagó nada — el total completo se sumará a su saldo pendiente. Si pagó una parte o todo, ese monto se registra como abono y solo la diferencia queda pendiente.</p>
+          ${state.modal.error ? `<p style="color:var(--danger);font-size:14px;margin-top:10px;">${esc(state.modal.error)}</p>` : ''}
+          <button class="btn btn-gold" id="ap_save" style="width:100%;margin-top:14px;">Registrar compra</button>
+        </div>
+      </div>`;
   } else if(state.modal.type === 'imagePreview'){
     root.innerHTML = `
       <div class="modal-overlay" id="modalOverlay">
@@ -3100,6 +3152,114 @@ function bindEvents(){
     }
   };
 
+  // Agregar compra nueva a una clienta existente
+  function captureAddPurchaseState(){
+    if(!state.modal || state.modal.type !== 'addPurchase') return;
+    state.modal.items = (state.modal.items||[]).map(row => {
+      const prodEl = document.querySelector(`[data-ap-product="${row.id}"]`);
+      const qtyEl = document.querySelector(`[data-ap-qty="${row.id}"]`);
+      return {
+        id: row.id,
+        productId: prodEl ? prodEl.value : row.productId,
+        qty: qtyEl ? qtyEl.value : row.qty,
+      };
+    });
+    const pagoEl = document.getElementById('ap_pago');
+    if(pagoEl) state.modal.pago = pagoEl.value;
+  }
+  const apAddRow = document.getElementById('ap_add_row');
+  if(apAddRow) apAddRow.onclick = () => {
+    captureAddPurchaseState();
+    state.modal.items.push({id:genId('R'), productId:'', qty:1});
+    render();
+  };
+  document.querySelectorAll('[data-ap-remove]').forEach(b => b.onclick = () => {
+    captureAddPurchaseState();
+    state.modal.items = state.modal.items.filter(row => row.id !== b.dataset.apRemove);
+    if(state.modal.items.length === 0) state.modal.items.push({id:genId('R'), productId:'', qty:1});
+    render();
+  });
+  document.querySelectorAll('[data-ap-product]').forEach(sel => sel.onchange = () => {
+    captureAddPurchaseState();
+    render();
+  });
+  const apSave = document.getElementById('ap_save');
+  if(apSave) apSave.onclick = async () => {
+    captureAddPurchaseState();
+    const phone = state.modal.phone;
+    const name = state.modal.name;
+    const rows = state.modal.items.filter(row => row.productId);
+    if(rows.length === 0){ state.modal.error = 'Elige al menos un artículo.'; render(); return; }
+    for(const row of rows){
+      const p = state.products.find(pp=>pp.id===row.productId);
+      const qty = Number(row.qty||0);
+      const stock = p ? productStock(p) : 0;
+      if(!p || qty <= 0){ state.modal.error = 'Revisa las cantidades capturadas.'; render(); return; }
+      if(qty > stock){ state.modal.error = 'No hay existencia suficiente de "' + p.name + '" (disponible: ' + stock + ').'; render(); return; }
+    }
+    const totalPreview = rows.reduce((s,row) => {
+      const p = state.products.find(pp=>pp.id===row.productId);
+      return s + effectivePrice(p) * Number(row.qty);
+    }, 0);
+    const pago = Number(state.modal.pago || 0);
+    if(pago < 0 || pago > totalPreview){ state.modal.error = 'El pago no puede ser mayor al total de la compra (' + money(totalPreview) + ').'; render(); return; }
+    apSave.disabled = true; apSave.textContent = 'Guardando…';
+    const rpcItems = rows.map(row => ({productId: row.productId, qty: Number(row.qty)}));
+    const { data: breakdownResult, error } = await sb.rpc('consume_stock_multi', {items: rpcItems});
+    if(error){
+      state.modal.error = 'No se pudo descontar la existencia. Detalle técnico: ' + (error.message||'desconocido');
+      apSave.disabled = false; apSave.textContent = 'Registrar compra';
+      render();
+      return;
+    }
+    for(const row of rows){
+      const { data: freshRow } = await sb.from('products').select('*').eq('id', row.productId).maybeSingle();
+      if(freshRow){
+        const updated = dbToProduct(freshRow);
+        const idx = state.products.findIndex(pp=>pp.id===updated.id);
+        if(idx >= 0) state.products[idx] = updated;
+      }
+    }
+    const saleItems = rows.map(row => {
+      const p = state.products.find(pp=>pp.id===row.productId);
+      const price = effectivePrice(p);
+      const qty = Number(row.qty);
+      const bd = (breakdownResult||[]).find(b=>b.productId===row.productId);
+      return {productId: p.id, name: p.name, qty, price, loteBreakdown: bd?bd.loteBreakdown:[]};
+    });
+    const sale = {
+      id: genId('V'),
+      customerPhone: phone,
+      customerName: name,
+      items: saleItems,
+      total: saleItems.reduce((s,it)=>s+it.price*it.qty, 0),
+      date: new Date().toISOString(),
+    };
+    state.sales.push(sale);
+    const savedSale = await insertRow('sales', saleToDb, sale);
+    if(!savedSale){
+      state.modal = null;
+      notify('Se descontó la existencia, pero no se pudo registrar la compra en su cuenta. Detalle técnico: ' + (lastSaveError||'desconocido') + '. El inventario ya quedó actualizado — avísanos para registrar la compra manualmente.');
+      render();
+      return;
+    }
+    let savedPayment = true;
+    if(pago > 0){
+      const payment = {id:genId('AB'), customerPhone:phone, amount:pago, date: new Date().toISOString().slice(0,10), method:'Efectivo'};
+      state.payments.push(payment);
+      savedPayment = await insertRow('payments', paymentToDb, payment);
+    }
+    state.modal = null;
+    if(!savedPayment){
+      notify('Se agregó la compra por ' + money(sale.total) + ' a la cuenta de ' + name + ', pero no se pudo registrar el pago que hizo al momento. Detalle técnico: ' + (lastSaveError||'desconocido') + '. Regístralo como abono desde su cuenta.');
+    } else if(pago > 0){
+      notify('Se agregó la compra por ' + money(sale.total) + ' a la cuenta de ' + name + ', con un pago de ' + money(pago) + ' al momento. Saldo pendiente de esta compra: ' + money(sale.total - pago) + '.');
+    } else {
+      notify('Se agregó la compra por ' + money(sale.total) + ' a la cuenta de ' + name + '. Ya se sumó a su saldo pendiente.');
+    }
+    render();
+  };
+
   // Lotes
   const newLoteBtn = document.getElementById('newLoteBtn');
   if(newLoteBtn) newLoteBtn.onclick = () => {
@@ -3204,6 +3364,17 @@ function bindEvents(){
   });
   const registrarAbono = document.getElementById('registrarAbono');
   if(registrarAbono) registrarAbono.onclick = registrarAbonoHandler;
+  const btnAddPurchase = document.getElementById('btnAddPurchase');
+  if(btnAddPurchase) btnAddPurchase.onclick = () => {
+    state.modal = {
+      type: 'addPurchase',
+      phone: btnAddPurchase.dataset.addPurchase,
+      name: btnAddPurchase.dataset.addPurchaseName,
+      items: [{id:genId('R'), productId:'', qty:1}],
+      error: ''
+    };
+    render();
+  };
   document.querySelectorAll('[data-confirm-abono-req]').forEach(b => b.onclick = () => confirmAbonoRequest(b.dataset.confirmAbonoReq));
   document.querySelectorAll('[data-dismiss-abono-req]').forEach(b => b.onclick = () => dismissAbonoRequest(b.dataset.dismissAbonoReq));
 
